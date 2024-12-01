@@ -1,32 +1,17 @@
 use crate::lexer::position::Position;
 use crate::lexer::token::{Keyword, Op, Token, TokenKind, KEYWORDS};
-use std::fmt::Display;
 use std::iter::Peekable;
 use std::str::Chars;
 use unicode_segmentation::UnicodeSegmentation;
 use Op::*;
 use TokenKind::*;
 
+#[derive(Debug, Clone)]
 pub struct Lexer<'a> {
     chars: Peekable<Chars<'a>>,
     position: Position,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub struct LexerError {
-    pub position: Position,
-    pub character: char,
-}
-
-impl Display for LexerError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Unknown character {} at {}",
-            self.character, self.position
-        )
-    }
-}
 impl<'a> Lexer<'a> {
     pub fn new(input: &str) -> Lexer {
         let position = Position::new();
@@ -34,27 +19,32 @@ impl<'a> Lexer<'a> {
         Lexer { position, chars }
     }
 
-    pub fn next_token(&mut self) -> Result<Token, LexerError> {
+    pub fn next_token(&mut self) -> Token {
         match self.chars.next() {
             Some(char) => match char {
                 ' ' => self.whitespace(),
                 '\n' | '\r' => self.line_break(char),
-                '0'..='9' => Ok(self.number(char)),
-                '+' | '-' | '*' | '/' => Ok(self.operator(char)),
-                'a'..='z' | 'A'..='Z' | '_' => Ok(self.word(char)),
-                '=' => Ok(self.equal_sign()),
-                _ => self.error(char),
+                '0'..='9' => self.number(char),
+                '+' | '-' | '*' | '/' => self.operator(char),
+                'a'..='z' | 'A'..='Z' | '_' => self.word(char),
+                '=' => self.equal_sign(),
+                _ => self.unknown_token(char),
             },
             None => self.eof(),
         }
     }
 
-    fn whitespace(&mut self) -> Result<Token, LexerError> {
+    pub fn peek_token(&mut self) -> Token {
+        let mut peek = self.clone();
+        peek.next_token()
+    }
+
+    fn whitespace(&mut self) -> Token {
         self.position.column += 1;
         self.next_token()
     }
 
-    fn line_break(&mut self, char: char) -> Result<Token, LexerError> {
+    fn line_break(&mut self, char: char) -> Token {
         //Handle CRLF
         if char == '\r' {
             self.chars.next_if(|c| *c == '\n');
@@ -64,18 +54,18 @@ impl<'a> Lexer<'a> {
         self.next_token()
     }
 
-    fn error(&self, character: char) -> Result<Token, LexerError> {
-        Err(LexerError {
-            character,
-            position: self.position,
-        })
-    }
-
-    fn eof(&self) -> Result<Token, LexerError> {
-        Ok(Token {
+    fn eof(&self) -> Token {
+        Token {
             kind: EOF,
             position: self.position,
-        })
+        }
+    }
+
+    fn unknown_token(&self, char: char) -> Token {
+        Token {
+            kind: Unknown(char),
+            position: self.position,
+        }
     }
 
     fn number(&mut self, char: char) -> Token {
@@ -145,19 +135,6 @@ impl<'a> Lexer<'a> {
         Token { kind, position }
     }
 }
-
-impl Iterator for Lexer<'_> {
-    type Item = Result<Token, LexerError>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.next_token() {
-            Ok(Token { kind: EOF, .. }) => None,
-            Ok(token) => Some(Ok(token)),
-            Err(e) => Some(Err(e)),
-        }
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -165,22 +142,22 @@ mod test {
     #[test]
     fn number() {
         let mut l = Lexer::new("234");
-        assert_eq!(l.next_token().unwrap().kind, Number(234));
-        assert_eq!(l.next_token().unwrap().kind, EOF);
+        assert_eq!(l.next_token().kind, Number(234));
+        assert_eq!(l.next_token().kind, EOF);
     }
 
     #[test]
     fn operator() {
         let mut l = Lexer::new("+");
-        assert_eq!(l.next_token().unwrap().kind, Op(ADD));
-        assert_eq!(l.next_token().unwrap().kind, EOF);
+        assert_eq!(l.next_token().kind, Op(ADD));
+        assert_eq!(l.next_token().kind, EOF);
     }
 
     #[test]
     fn assignment_operator() {
         let mut l = Lexer::new("+=");
-        assert_eq!(l.next_token().unwrap().kind, Assignment(Some(ADD)));
-        assert_eq!(l.next_token().unwrap().kind, EOF);
+        assert_eq!(l.next_token().kind, Assignment(Some(ADD)));
+        assert_eq!(l.next_token().kind, EOF);
     }
 
     #[test]
@@ -188,12 +165,12 @@ mod test {
         let mut l = Lexer::new("abc");
         assert_eq!(
             l.next_token(),
-            Ok(Token {
+            Token {
                 kind: Identifier("abc".to_string()),
                 position: Position::new()
-            })
+            }
         );
-        assert_eq!(l.next_token().unwrap().kind, EOF);
+        assert_eq!(l.next_token().kind, EOF);
     }
 
     #[test]
@@ -201,12 +178,12 @@ mod test {
         let mut l = Lexer::new("if");
         assert_eq!(
             l.next_token(),
-            Ok(Token {
+            Token {
                 kind: Keyword(Keyword::IF),
                 position: Position::new()
-            })
+            }
         );
-        assert_eq!(l.next_token().unwrap().kind, EOF);
+        assert_eq!(l.next_token().kind, EOF);
     }
 
     #[test]
@@ -214,10 +191,10 @@ mod test {
         let mut l = Lexer::new("命");
         assert_eq!(
             l.next_token(),
-            Err(LexerError {
-                character: '命',
+            Token {
+                kind: Unknown('命'),
                 position: Position::new()
-            })
+            }
         );
     }
 }

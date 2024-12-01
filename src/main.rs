@@ -1,10 +1,12 @@
 use crate::lexer::Lexer;
+use crate::lexer::TokenKind::EOF;
 
 mod lexer;
+mod parser;
 
 fn main() {
     println!("Hello, world!");
-    let l = Lexer::new(
+    let mut l = Lexer::new(
         "
 a 32
 b 5
@@ -14,10 +16,11 @@ else
 b 4
 ",
     );
-    for res in l {
-        match res {
-            Ok(token) => println!("{}", token),
-            Err(e) => println!("{}", e),
+    loop {
+        let token = l.next_token();
+        println!("{:?}", token);
+        if token.kind == EOF {
+            break;
         }
     }
 }

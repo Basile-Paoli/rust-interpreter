@@ -11,6 +11,7 @@ pub enum TokenKind {
     Number(i32),
     Identifier(String),
     Keyword(Keyword),
+    Unknown(char),
 }
 
 impl Display for TokenKind {
@@ -25,6 +26,7 @@ impl Display for TokenKind {
             TokenKind::Number(n) => write!(f, "Number({})", n),
             TokenKind::Identifier(s) => write!(f, "Identifier({})", s),
             TokenKind::Keyword(k) => write!(f, "Keyword({})", k),
+            TokenKind::Unknown(c) => write!(f, "Unknown({})", c),
         }
     }
 }
