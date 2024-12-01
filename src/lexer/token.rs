@@ -5,7 +5,6 @@ use std::fmt::{Debug, Display};
 
 #[derive(PartialEq, Clone, Debug)]
 pub enum TokenKind {
-    EOF,
     Op(Op),
     Assignment(Option<Op>),
     Number(i32),
@@ -17,7 +16,6 @@ pub enum TokenKind {
 impl Display for TokenKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TokenKind::EOF => write!(f, "EOF"),
             TokenKind::Op(op) => write!(f, "{}", op),
             TokenKind::Assignment(op) => match op {
                 Some(op) => write!(f, "Assignment({})", op),

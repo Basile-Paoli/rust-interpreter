@@ -18,47 +18,38 @@ impl<'a> Lexer<'a> {
         let chars = input.chars().peekable();
         Lexer { position, chars }
     }
+}
 
-    pub fn next_token(&mut self) -> Token {
-        match self.chars.next() {
-            Some(char) => match char {
-                ' ' => self.whitespace(),
-                '\n' | '\r' => self.line_break(char),
-                '0'..='9' => self.number(char),
-                '+' | '-' | '*' | '/' => self.operator(char),
-                'a'..='z' | 'A'..='Z' | '_' => self.word(char),
-                '=' => self.equal_sign(),
-                _ => self.unknown_token(char),
-            },
-            None => self.eof(),
-        }
+impl Iterator for Lexer<'_> {
+    type Item = Token;
+
+    fn next(&mut self) -> Option<Token> {
+        self.chars.next().and_then(|char| match char {
+            ' ' => self.whitespace(),
+            '\n' | '\r' => self.line_break(char),
+            '0'..='9' => Some(self.number(char)),
+            '+' | '-' | '*' | '/' => Some(self.operator(char)),
+            'a'..='z' | 'A'..='Z' | '_' => Some(self.word(char)),
+            '=' => Some(self.equal_sign()),
+            _ => Some(self.unknown_token(char)),
+        })
     }
+}
 
-    pub fn peek_token(&mut self) -> Token {
-        let mut peek = self.clone();
-        peek.next_token()
-    }
-
-    fn whitespace(&mut self) -> Token {
+impl<'a> Lexer<'a> {
+    fn whitespace(&mut self) -> Option<Token> {
         self.position.column += 1;
-        self.next_token()
+        self.next()
     }
 
-    fn line_break(&mut self, char: char) -> Token {
+    fn line_break(&mut self, char: char) -> Option<Token> {
         //Handle CRLF
         if char == '\r' {
             self.chars.next_if(|c| *c == '\n');
         }
         self.position.line += 1;
         self.position.column = 1;
-        self.next_token()
-    }
-
-    fn eof(&self) -> Token {
-        Token {
-            kind: EOF,
-            position: self.position,
-        }
+        self.next()
     }
 
     fn unknown_token(&self, char: char) -> Token {
@@ -135,6 +126,7 @@ impl<'a> Lexer<'a> {
         Token { kind, position }
     }
 }
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -142,55 +134,55 @@ mod test {
     #[test]
     fn number() {
         let mut l = Lexer::new("234");
-        assert_eq!(l.next_token().kind, Number(234));
-        assert_eq!(l.next_token().kind, EOF);
+        assert_eq!(l.next().unwrap().kind, Number(234));
+        assert_eq!(l.next(), None);
     }
 
     #[test]
     fn operator() {
         let mut l = Lexer::new("+");
-        assert_eq!(l.next_token().kind, Op(ADD));
-        assert_eq!(l.next_token().kind, EOF);
+        assert_eq!(l.next().unwrap().kind, Op(ADD));
+        assert_eq!(l.next(), None);
     }
 
     #[test]
     fn assignment_operator() {
         let mut l = Lexer::new("+=");
-        assert_eq!(l.next_token().kind, Assignment(Some(ADD)));
-        assert_eq!(l.next_token().kind, EOF);
+        assert_eq!(l.next().unwrap().kind, Assignment(Some(ADD)));
+        assert_eq!(l.next(), None);
     }
 
     #[test]
     fn identifier() {
         let mut l = Lexer::new("abc");
         assert_eq!(
-            l.next_token(),
+            l.next().unwrap(),
             Token {
                 kind: Identifier("abc".to_string()),
                 position: Position::new()
             }
         );
-        assert_eq!(l.next_token().kind, EOF);
+        assert_eq!(l.next(), None);
     }
 
     #[test]
     fn keyword() {
         let mut l = Lexer::new("if");
         assert_eq!(
-            l.next_token(),
+            l.next().unwrap(),
             Token {
                 kind: Keyword(Keyword::IF),
                 position: Position::new()
             }
         );
-        assert_eq!(l.next_token().kind, EOF);
+        assert_eq!(l.next(), None);
     }
 
     #[test]
     fn unknown_token() {
         let mut l = Lexer::new("命");
         assert_eq!(
-            l.next_token(),
+            l.next().unwrap(),
             Token {
                 kind: Unknown('命'),
                 position: Position::new()

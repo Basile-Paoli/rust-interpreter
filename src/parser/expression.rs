@@ -63,8 +63,10 @@ impl Parser<'_> {
     pub fn parse_add(&mut self) -> Result<AstNode, Error> {
         let mut left = self.parse_mul()?;
 
-        while let TokenKind::Op(Op::ADD | Op::SUB) = self.lexer.peek_token().kind {
-            let token = self.lexer.next_token();
+        while let Some(token) = self
+            .lexer
+            .next_if(|t| matches!(t.kind, TokenKind::Op(ADD | SUB)))
+        {
             let right = self.parse_mul()?;
             left = BinOp::new(&token, left, right);
         }
@@ -74,8 +76,10 @@ impl Parser<'_> {
     pub fn parse_mul(&mut self) -> Result<AstNode, Error> {
         let mut left = self.parse_primary()?;
 
-        while let TokenKind::Op(MUL | DIV) = self.lexer.peek_token().kind {
-            let token = self.lexer.next_token();
+        while let Some(token) = self
+            .lexer
+            .next_if(|t| matches!(t.kind, TokenKind::Op(MUL | DIV)))
+        {
             let right = self.parse_primary()?;
             left = BinOp::new(&token, left, right);
         }
@@ -83,11 +87,12 @@ impl Parser<'_> {
     }
 
     pub fn parse_primary(&mut self) -> Result<AstNode, Error> {
-        let token = self.lexer.next_token();
-        match token.kind {
-            TokenKind::Number(_) => Ok(Int::new(&token)),
-            _ => Err(Error::UnexpectedToken(token)),
-        }
+        self.lexer
+            .next()
+            .map_or(Err(Error::UnexpectedEof), |token| match token.kind {
+                TokenKind::Number(_) => Ok(Int::new(&token)),
+                _ => Err(Error::UnexpectedToken(token)),
+            })
     }
 }
 
