@@ -1,96 +1,100 @@
-use crate::lexer::Op::*;
-use crate::lexer::{Op, Token, TokenKind};
-use crate::parser::ast::{AstNode, Node};
+use crate::lexer::{Op, Position, Token};
+use crate::parser::{Error, Parser};
+use Op::*;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expression {
     BinOp(BinOp),
     Int(Int),
+    Assignment(Assignment),
 }
-use crate::parser::{Error, Parser};
-use Expression::*;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct BinOp {
     op: Op,
-    operands: Box<[AstNode; 2]>,
-}
-
-impl BinOp {
-    pub fn new(token: &Token, left: AstNode, right: AstNode) -> AstNode {
-        AstNode {
-            node: Node::Expression(BinOp(BinOp {
-                op: BinOp::op_from_token(token),
-                operands: Box::new([left, right]),
-            })),
-            position: token.position,
-        }
-    }
-
-    fn op_from_token(token: &Token) -> Op {
-        if let TokenKind::Op(op @ (ADD | SUB | MUL | DIV)) = token.kind {
-            op
-        } else {
-            unreachable!()
-        }
-    }
+    left: Box<Expression>,
+    right: Box<Expression>,
+    position: Position,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Int {
     value: i32,
+    position: Position,
 }
 
-impl Int {
-    pub fn new(token: &Token) -> AstNode {
-        AstNode {
-            node: Node::Expression(Int(Int {
-                value: match token.kind {
-                    TokenKind::Number(n) => n,
-                    _ => unreachable!(),
-                },
-            })),
-            position: token.position,
-        }
-    }
+#[derive(Clone, Debug, PartialEq)]
+pub struct Assignment {
+    left: Box<Expression>,
+    right: Box<Expression>,
+    op: Option<Op>,
+    position: Position,
 }
 
 impl Parser<'_> {
-    pub fn parse_expression(&mut self) -> Result<AstNode, Error> {
-        self.parse_add()
+    pub fn parse_expression(&mut self) -> Result<Expression, Error> {
+        self.parse_assignment()
     }
 
-    pub fn parse_add(&mut self) -> Result<AstNode, Error> {
+    pub fn parse_assignment(&mut self) -> Result<Expression, Error> {
+        let mut left = self.parse_add()?;
+        if let Some(Token::Assignment(op, position)) =
+            self.lexer.next_if(|t| matches!(t, Token::Assignment(..)))
+        {
+            // Check for invalid left-hand side
+            // TODO
+            let right = self.parse_add()?;
+            left = Expression::Assignment(Assignment {
+                left: Box::new(left),
+                right: Box::new(right),
+                op,
+                position,
+            });
+        }
+        Ok(left)
+    }
+
+    pub fn parse_add(&mut self) -> Result<Expression, Error> {
         let mut left = self.parse_mul()?;
 
-        while let Some(token) = self
+        while let Some(Token::Op(op, position)) = self
             .lexer
-            .next_if(|t| matches!(t.kind, TokenKind::Op(ADD | SUB)))
+            .next_if(|t| matches!(t, Token::Op(ADD | SUB, ..)))
         {
             let right = self.parse_mul()?;
-            left = BinOp::new(&token, left, right);
+            left = Expression::BinOp(BinOp {
+                op,
+                left: Box::new(left),
+                right: Box::new(right),
+                position,
+            });
         }
         Ok(left)
     }
 
-    pub fn parse_mul(&mut self) -> Result<AstNode, Error> {
+    pub fn parse_mul(&mut self) -> Result<Expression, Error> {
         let mut left = self.parse_primary()?;
 
-        while let Some(token) = self
+        while let Some(Token::Op(op, position)) = self
             .lexer
-            .next_if(|t| matches!(t.kind, TokenKind::Op(MUL | DIV)))
+            .next_if(|t| matches!(t, Token::Op(MUL | DIV, ..)))
         {
             let right = self.parse_primary()?;
-            left = BinOp::new(&token, left, right);
+            left = Expression::BinOp(BinOp {
+                op,
+                left: Box::new(left),
+                right: Box::new(right),
+                position,
+            });
         }
         Ok(left)
     }
 
-    pub fn parse_primary(&mut self) -> Result<AstNode, Error> {
+    pub fn parse_primary(&mut self) -> Result<Expression, Error> {
         self.lexer
             .next()
-            .map_or(Err(Error::UnexpectedEof), |token| match token.kind {
-                TokenKind::Number(_) => Ok(Int::new(&token)),
+            .map_or(Err(Error::UnexpectedEof), |token| match token {
+                Token::Number(value, position) => Ok(Expression::Int(Int { value, position })),
                 _ => Err(Error::UnexpectedToken(token)),
             })
     }
@@ -105,13 +109,13 @@ mod test {
     fn test_parse_int() {
         let input = "1";
         let mut parser = Parser::new(input);
-        let ast = parser.parse_expression().unwrap();
+        let expr = parser.parse_expression().unwrap();
         assert_eq!(
-            ast,
-            AstNode {
-                node: Node::Expression(Int(Int { value: 1 })),
-                position: Position::new()
-            }
+            expr,
+            Expression::Int(Int {
+                value: 1,
+                position: Position { line: 1, column: 1 }
+            })
         );
     }
 
@@ -119,17 +123,14 @@ mod test {
     fn test_parse_binop() {
         let input = "1 + 2";
         let mut parser = Parser::new(input);
-        let ast = parser.parse_expression().unwrap();
-        if let Node::Expression(BinOp(binop)) = ast.node {
+        let expr = parser.parse_expression().unwrap();
+        if let Expression::BinOp(binop) = expr {
             assert_eq!(binop.op, ADD);
-            assert_eq!(
-                binop.operands[0].node,
-                Node::Expression(Int(Int { value: 1 }))
-            );
-            assert_eq!(
-                binop.operands[1].node,
-                Node::Expression(Int(Int { value: 2 }))
-            );
+            assert!(matches!(*binop.left, Expression::Int(Int { value: 1, .. })));
+            assert!(matches!(
+                *binop.right,
+                Expression::Int(Int { value: 2, .. })
+            ));
         } else {
             unreachable!("Expected BinOp node");
         }
@@ -139,17 +140,14 @@ mod test {
     fn test_precedence() {
         let input = "1 + 2 * 3";
         let mut parser = Parser::new(input);
-        let ast = parser.parse_expression().unwrap();
+        let expr = parser.parse_expression().unwrap();
 
-        if let Node::Expression(BinOp(binop)) = ast.node {
+        if let Expression::BinOp(binop) = expr {
             assert_eq!(binop.op, ADD);
-            assert_eq!(
-                binop.operands[0].node,
-                Node::Expression(Int(Int { value: 1 }))
-            );
+            assert!(matches!(*binop.left, Expression::Int(Int { value: 1, .. })));
             assert!(matches!(
-                binop.operands[1].node,
-                Node::Expression(BinOp(BinOp { op: MUL, .. }))
+                *binop.right,
+                Expression::BinOp(BinOp { op: MUL, .. })
             ));
         } else {
             unreachable!("Expected BinOp node");

@@ -4,27 +4,27 @@ use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 
 #[derive(PartialEq, Clone, Debug)]
-pub enum TokenKind {
-    Op(Op),
-    Assignment(Option<Op>),
-    Number(i32),
-    Identifier(String),
-    Keyword(Keyword),
-    Unknown(char),
+pub enum Token {
+    Op(Op, Position),
+    Assignment(Option<Op>, Position),
+    Number(i32, Position),
+    Identifier(String, Position),
+    Keyword(Keyword, Position),
+    Unknown(char, Position),
 }
 
-impl Display for TokenKind {
+impl Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TokenKind::Op(op) => write!(f, "{}", op),
-            TokenKind::Assignment(op) => match op {
-                Some(op) => write!(f, "Assignment({})", op),
-                None => write!(f, "Assignment"),
+            Token::Op(op, p) => write!(f, "{} at {}", op, p),
+            Token::Assignment(op, p) => match op {
+                Some(op) => write!(f, "Assignment({}) at {}", op, p),
+                None => write!(f, "Assignment at {}", p),
             },
-            TokenKind::Number(n) => write!(f, "Number({})", n),
-            TokenKind::Identifier(s) => write!(f, "Identifier({})", s),
-            TokenKind::Keyword(k) => write!(f, "Keyword({})", k),
-            TokenKind::Unknown(c) => write!(f, "Unknown({})", c),
+            Token::Number(n, p) => write!(f, "Number({}) at {}", n, p),
+            Token::Identifier(s, p) => write!(f, "Identifier({}) at {}", s, p),
+            Token::Keyword(k, p) => write!(f, "Keyword({}) at {}", k, p),
+            Token::Unknown(c, p) => write!(f, "Unknown({}) at {}", c, p),
         }
     }
 }
@@ -76,16 +76,4 @@ lazy_static! {
         ("for", Keyword::FOR),
         ("while", Keyword::WHILE),
     ]);
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct Token {
-    pub position: Position,
-    pub kind: TokenKind,
-}
-
-impl Display for Token {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} at {}", self.kind, self.position)
-    }
 }

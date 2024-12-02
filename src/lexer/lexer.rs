@@ -1,10 +1,10 @@
 use crate::lexer::position::Position;
-use crate::lexer::token::{Keyword, Op, Token, TokenKind, KEYWORDS};
+use crate::lexer::token::{Keyword, Op, Token, KEYWORDS};
 use std::iter::Peekable;
 use std::str::Chars;
 use unicode_segmentation::UnicodeSegmentation;
 use Op::*;
-use TokenKind::*;
+use Token::*;
 
 #[derive(Debug, Clone)]
 pub struct Lexer<'a> {
@@ -53,10 +53,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn unknown_token(&self, char: char) -> Token {
-        Token {
-            kind: Unknown(char),
-            position: self.position,
-        }
+        Unknown(char, self.position)
     }
 
     fn number(&mut self, char: char) -> Token {
@@ -68,8 +65,7 @@ impl<'a> Lexer<'a> {
         }
         self.position.column += num.graphemes(true).count() as i32;
 
-        let kind = Number(num.parse().unwrap());
-        Token { kind, position }
+        Number(num.parse().unwrap(), position)
     }
 
     fn operator(&mut self, char: char) -> Token {
@@ -84,15 +80,13 @@ impl<'a> Lexer<'a> {
         };
 
         // Check for assignment operators like +=, -=, *=, /=
-        let kind = match self.chars.next_if(|c| *c == '=') {
+        match self.chars.next_if(|c| *c == '=') {
             Some(_) => {
                 self.position.column += 1;
-                Assignment(Some(op))
+                Assignment(Some(op), position)
             }
-            None => Op(op),
-        };
-
-        Token { kind, position }
+            None => Op(op, position),
+        }
     }
 
     fn word(&mut self, char: char) -> Token {
@@ -106,24 +100,22 @@ impl<'a> Lexer<'a> {
         }
         self.position.column += word.graphemes(true).count() as i32;
 
-        let kind = match KEYWORDS.get(word.as_str()) {
-            Some(keyword) => Keyword(*keyword),
-            None => Identifier(word),
-        };
-        Token { kind, position }
+        match KEYWORDS.get(word.as_str()) {
+            Some(keyword) => Keyword(*keyword, position),
+            None => Identifier(word, position),
+        }
     }
 
     fn equal_sign(&mut self) -> Token {
         let position = self.position;
         self.position.column += 1;
-        let kind = match self.chars.next_if(|c| *c == '=') {
+        match self.chars.next_if(|c| *c == '=') {
             Some(_) => {
                 self.position.column += 1;
-                Op(EQ)
+                Op(EQ, position)
             }
-            None => Assignment(None),
-        };
-        Token { kind, position }
+            None => Assignment(None, position),
+        }
     }
 }
 
@@ -134,21 +126,21 @@ mod test {
     #[test]
     fn number() {
         let mut l = Lexer::new("234");
-        assert_eq!(l.next().unwrap().kind, Number(234));
+        assert_eq!(l.next().unwrap(), Number(234, Position::new()));
         assert_eq!(l.next(), None);
     }
 
     #[test]
     fn operator() {
         let mut l = Lexer::new("+");
-        assert_eq!(l.next().unwrap().kind, Op(ADD));
+        assert_eq!(l.next().unwrap(), Op(ADD, Position::new()));
         assert_eq!(l.next(), None);
     }
 
     #[test]
     fn assignment_operator() {
         let mut l = Lexer::new("+=");
-        assert_eq!(l.next().unwrap().kind, Assignment(Some(ADD)));
+        assert_eq!(l.next().unwrap(), Assignment(Some(ADD), Position::new()));
         assert_eq!(l.next(), None);
     }
 
@@ -157,10 +149,7 @@ mod test {
         let mut l = Lexer::new("abc");
         assert_eq!(
             l.next().unwrap(),
-            Token {
-                kind: Identifier("abc".to_string()),
-                position: Position::new()
-            }
+            Identifier("abc".to_string(), Position::new())
         );
         assert_eq!(l.next(), None);
     }
@@ -170,10 +159,7 @@ mod test {
         let mut l = Lexer::new("if");
         assert_eq!(
             l.next().unwrap(),
-            Token {
-                kind: Keyword(Keyword::IF),
-                position: Position::new()
-            }
+            Keyword(Keyword::IF, Position::new())
         );
         assert_eq!(l.next(), None);
     }
@@ -183,10 +169,7 @@ mod test {
         let mut l = Lexer::new("命");
         assert_eq!(
             l.next().unwrap(),
-            Token {
-                kind: Unknown('命'),
-                position: Position::new()
-            }
+            Unknown('命', Position::new())
         );
     }
 }

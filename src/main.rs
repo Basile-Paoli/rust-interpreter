@@ -16,6 +16,6 @@ b 4
 ",
     );
     for token in l {
-        println!("{:?}", token);
+        println!("{}", token);
     }
 }
