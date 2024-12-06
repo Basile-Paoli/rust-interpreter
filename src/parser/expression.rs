@@ -7,6 +7,7 @@ pub enum Expression {
     BinOp(BinOp),
     Int(Int),
     Assignment(Assignment),
+    LValue(LValue),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -25,9 +26,20 @@ pub struct Int {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Assignment {
-    left: Box<Expression>,
+    left: Box<LValue>,
     right: Box<Expression>,
     op: Option<Op>,
+    position: Position,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum LValue {
+    Identifier(Identifier),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Identifier {
+    name: String,
     position: Position,
 }
 
@@ -41,15 +53,18 @@ impl Parser<'_> {
         if let Some(Token::Assignment(op, position)) =
             self.lexer.next_if(|t| matches!(t, Token::Assignment(..)))
         {
-            // Check for invalid left-hand side
-            // TODO
-            let right = self.parse_add()?;
-            left = Expression::Assignment(Assignment {
-                left: Box::new(left),
-                right: Box::new(right),
-                op,
-                position,
-            });
+            match left {
+                Expression::LValue(lvalue) => {
+                    let right = self.parse_add()?;
+                    left = Expression::Assignment(Assignment {
+                        left: Box::new(lvalue),
+                        right: Box::new(right),
+                        op,
+                        position,
+                    });
+                }
+                _ => return Err(Error::InvalidAssignmentTarget(position)),
+            }
         }
         Ok(left)
     }
@@ -95,6 +110,12 @@ impl Parser<'_> {
             .next()
             .map_or(Err(Error::UnexpectedEof), |token| match token {
                 Token::Number(value, position) => Ok(Expression::Int(Int { value, position })),
+                Token::Identifier(name, position) => {
+                    Ok(Expression::LValue(LValue::Identifier(Identifier {
+                        name,
+                        position,
+                    })))
+                }
                 _ => Err(Error::UnexpectedToken(token)),
             })
     }
@@ -152,5 +173,14 @@ mod test {
         } else {
             unreachable!("Expected BinOp node");
         }
+    }
+
+    #[test]
+    fn test_invalid_assignment() {
+        let input = "1 + 2 = 3";
+        let mut parser = Parser::new(input);
+        let err = parser.parse_expression().unwrap_err();
+        println!("{}", err);
+        assert!(matches!(err, Error::InvalidAssignmentTarget(..)));
     }
 }
