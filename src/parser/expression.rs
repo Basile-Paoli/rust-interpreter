@@ -12,23 +12,23 @@ pub enum Expression {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct BinOp {
-    op: Op,
-    left: Box<Expression>,
-    right: Box<Expression>,
+    pub(crate) op: Op,
+    pub(crate) left: Box<Expression>,
+    pub(crate) right: Box<Expression>,
     position: Position,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Int {
-    value: i32,
-    position: Position,
+    pub(crate) value: i32,
+    pub(crate) position: Position,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Assignment {
-    left: Box<LValue>,
-    right: Box<Expression>,
-    op: Option<Op>,
+    pub(crate) left: Box<LValue>,
+    pub(crate) right: Box<Expression>,
+    pub(crate) op: Option<Op>,
     position: Position,
 }
 
@@ -39,7 +39,7 @@ pub enum LValue {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Identifier {
-    name: String,
+    pub(crate) name: String,
     position: Position,
 }
 
@@ -180,7 +180,6 @@ mod test {
         let input = "1 + 2 = 3";
         let mut parser = Parser::new(input);
         let err = parser.parse_expression().unwrap_err();
-        println!("{}", err);
         assert!(matches!(err, Error::InvalidAssignmentTarget(..)));
     }
 }

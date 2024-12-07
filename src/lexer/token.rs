@@ -5,6 +5,7 @@ use std::fmt::{Debug, Display};
 
 #[derive(PartialEq, Clone, Debug)]
 pub enum Token {
+    Semicolon(Position),
     Op(Op, Position),
     Assignment(Option<Op>, Position),
     Number(i32, Position),
@@ -16,6 +17,7 @@ pub enum Token {
 impl Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Token::Semicolon(p) => write!(f, "Semicolon at {}", p),
             Token::Op(op, p) => write!(f, "{} at {}", op, p),
             Token::Assignment(op, p) => match op {
                 Some(op) => write!(f, "Assignment({}) at {}", op, p),

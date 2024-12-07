@@ -1,12 +1,19 @@
-use crate::lexer::{Lexer, Position, Token};
-use std::fmt::Display;
+use crate::error::Error;
+use crate::lexer::{Lexer, Token};
 use std::iter::Peekable;
 
-mod ast;
+mod display;
 mod expression;
 
-struct Parser<'a> {
-    lexer: Peekable<Lexer<'a>>,
+pub use expression::{Assignment, BinOp, Expression, Identifier, Int, LValue};
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Instruction {
+    Expression(Expression),
+}
+
+pub(crate) struct Parser<'a> {
+    pub(crate) lexer: Peekable<Lexer<'a>>,
 }
 
 impl<'a> Parser<'a> {
@@ -15,23 +22,29 @@ impl<'a> Parser<'a> {
             lexer: Lexer::new(input).peekable(),
         }
     }
-}
 
-#[derive(Debug)]
-pub enum Error {
-    UnexpectedToken(Token),
-    InvalidAssignmentTarget(Position),
-    UnexpectedEof,
-}
+    pub fn parse(&mut self) -> Result<Vec<Instruction>, Error> {
+        let mut instructions = Vec::new();
+        while let Some(instruction) = self.parse_instruction()? {
+            instructions.push(instruction);
+        }
+        Ok(instructions)
+    }
 
-impl Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::UnexpectedToken(token) => write!(f, "Unexpected token: {}", token),
-            Error::InvalidAssignmentTarget(position) => {
-                write!(f, "Invalid assignment target at {}", position)
-            }
-            Error::UnexpectedEof => write!(f, "Unexpected end of file"),
+    fn parse_instruction(&mut self) -> Result<Option<Instruction>, Error> {
+        let next = self.lexer.peek();
+        match next {
+            None => Ok(None),
+            _ => self.parse_expression_instruction(),
+        }
+    }
+
+    fn parse_expression_instruction(&mut self) -> Result<Option<Instruction>, Error> {
+        let expression = self.parse_expression()?;
+        match self.lexer.next() {
+            Some(Token::Semicolon(_)) => Ok(Some(Instruction::Expression(expression))),
+            Some(token) => Err(Error::UnexpectedToken(token)),
+            None => Err(Error::UnexpectedEof),
         }
     }
 }

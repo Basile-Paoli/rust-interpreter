@@ -1,5 +1,5 @@
 use crate::lexer::position::Position;
-use crate::lexer::token::{Keyword, Op, Token, KEYWORDS};
+use crate::lexer::token::{Op, Token, KEYWORDS};
 use std::iter::Peekable;
 use std::str::Chars;
 use unicode_segmentation::UnicodeSegmentation;
@@ -27,6 +27,7 @@ impl Iterator for Lexer<'_> {
         self.chars.next().and_then(|char| match char {
             ' ' => self.whitespace(),
             '\n' | '\r' => self.line_break(char),
+            ';' => Some(self.semicolon()),
             '0'..='9' => Some(self.number(char)),
             '+' | '-' | '*' | '/' => Some(self.operator(char)),
             'a'..='z' | 'A'..='Z' | '_' => Some(self.word(char)),
@@ -50,6 +51,12 @@ impl<'a> Lexer<'a> {
         self.position.line += 1;
         self.position.column = 1;
         self.next()
+    }
+
+    fn semicolon(&mut self) -> Token {
+        let position = self.position;
+        self.position.column += 1;
+        Semicolon(position)
     }
 
     fn unknown_token(&self, char: char) -> Token {
@@ -122,6 +129,7 @@ impl<'a> Lexer<'a> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::lexer::token::Keyword;
 
     #[test]
     fn number() {
@@ -157,19 +165,13 @@ mod test {
     #[test]
     fn keyword() {
         let mut l = Lexer::new("if");
-        assert_eq!(
-            l.next().unwrap(),
-            Keyword(Keyword::IF, Position::new())
-        );
+        assert_eq!(l.next().unwrap(), Keyword(Keyword::IF, Position::new()));
         assert_eq!(l.next(), None);
     }
 
     #[test]
     fn unknown_token() {
         let mut l = Lexer::new("命");
-        assert_eq!(
-            l.next().unwrap(),
-            Unknown('命', Position::new())
-        );
+        assert_eq!(l.next().unwrap(), Unknown('命', Position::new()));
     }
 }
