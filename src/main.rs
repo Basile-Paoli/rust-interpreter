@@ -7,7 +7,7 @@ mod parser;
 fn main() {
     println!("Hello, world!");
     let mut p = Parser::new(
-        "a = 1 + 2 * 3;
+        "a = (1 + 2) * 3;
         b = a + 3;
         b += 1;
         c = b + 4;

@@ -44,18 +44,18 @@ pub struct Identifier {
 }
 
 impl Parser<'_> {
-    pub fn parse_expression(&mut self) -> Result<Expression, Error> {
-        self.parse_assignment()
+    pub fn expression(&mut self) -> Result<Expression, Error> {
+        self.assignment()
     }
 
-    pub fn parse_assignment(&mut self) -> Result<Expression, Error> {
-        let mut left = self.parse_add()?;
+    pub fn assignment(&mut self) -> Result<Expression, Error> {
+        let mut left = self.add()?;
         if let Some(Token::Assignment(op, position)) =
             self.lexer.next_if(|t| matches!(t, Token::Assignment(..)))
         {
             match left {
                 Expression::LValue(lvalue) => {
-                    let right = self.parse_add()?;
+                    let right = self.add()?;
                     left = Expression::Assignment(Assignment {
                         left: Box::new(lvalue),
                         right: Box::new(right),
@@ -69,14 +69,14 @@ impl Parser<'_> {
         Ok(left)
     }
 
-    pub fn parse_add(&mut self) -> Result<Expression, Error> {
-        let mut left = self.parse_mul()?;
+    pub fn add(&mut self) -> Result<Expression, Error> {
+        let mut left = self.mul()?;
 
         while let Some(Token::Op(op, position)) = self
             .lexer
             .next_if(|t| matches!(t, Token::Op(ADD | SUB, ..)))
         {
-            let right = self.parse_mul()?;
+            let right = self.mul()?;
             left = Expression::BinOp(BinOp {
                 op,
                 left: Box::new(left),
@@ -87,14 +87,14 @@ impl Parser<'_> {
         Ok(left)
     }
 
-    pub fn parse_mul(&mut self) -> Result<Expression, Error> {
-        let mut left = self.parse_primary()?;
+    pub fn mul(&mut self) -> Result<Expression, Error> {
+        let mut left = self.primary()?;
 
         while let Some(Token::Op(op, position)) = self
             .lexer
             .next_if(|t| matches!(t, Token::Op(MUL | DIV, ..)))
         {
-            let right = self.parse_primary()?;
+            let right = self.primary()?;
             left = Expression::BinOp(BinOp {
                 op,
                 left: Box::new(left),
@@ -105,7 +105,7 @@ impl Parser<'_> {
         Ok(left)
     }
 
-    pub fn parse_primary(&mut self) -> Result<Expression, Error> {
+    pub fn primary(&mut self) -> Result<Expression, Error> {
         self.lexer
             .next()
             .map_or(Err(Error::UnexpectedEof), |token| match token {
@@ -116,8 +116,18 @@ impl Parser<'_> {
                         position,
                     })))
                 }
+                Token::LParen(_) => self.paren_expr(),
                 _ => Err(Error::UnexpectedToken(token)),
             })
+    }
+
+    pub fn paren_expr(&mut self) -> Result<Expression, Error> {
+        let expr = self.expression()?;
+        match self.lexer.next() {
+            Some(Token::RParen(_)) => Ok(expr),
+            Some(token) => Err(Error::UnexpectedToken(token)),
+            None => Err(Error::UnexpectedEof),
+        }
     }
 }
 
@@ -130,7 +140,7 @@ mod test {
     fn test_parse_int() {
         let input = "1";
         let mut parser = Parser::new(input);
-        let expr = parser.parse_expression().unwrap();
+        let expr = parser.expression().unwrap();
         assert_eq!(
             expr,
             Expression::Int(Int {
@@ -144,7 +154,7 @@ mod test {
     fn test_parse_binop() {
         let input = "1 + 2";
         let mut parser = Parser::new(input);
-        let expr = parser.parse_expression().unwrap();
+        let expr = parser.expression().unwrap();
         if let Expression::BinOp(binop) = expr {
             assert_eq!(binop.op, ADD);
             assert!(matches!(*binop.left, Expression::Int(Int { value: 1, .. })));
@@ -161,7 +171,7 @@ mod test {
     fn test_precedence() {
         let input = "1 + 2 * 3";
         let mut parser = Parser::new(input);
-        let expr = parser.parse_expression().unwrap();
+        let expr = parser.expression().unwrap();
 
         if let Expression::BinOp(binop) = expr {
             assert_eq!(binop.op, ADD);
@@ -176,10 +186,31 @@ mod test {
     }
 
     #[test]
+    fn test_parent_expr() {
+        let input = "(1 + 2) * 3";
+        let mut parser = Parser::new(input);
+        let expr = parser.expression().unwrap();
+
+        if let Expression::BinOp(binop) = expr {
+            assert_eq!(binop.op, MUL);
+            assert!(matches!(
+                *binop.left,
+                Expression::BinOp(BinOp { op: ADD, .. })
+            ));
+            assert!(matches!(
+                *binop.right,
+                Expression::Int(Int { value: 3, .. })
+            ));
+        } else {
+            unreachable!("Expected BinOp node");
+        }
+    }
+
+    #[test]
     fn test_invalid_assignment() {
         let input = "1 + 2 = 3";
         let mut parser = Parser::new(input);
-        let err = parser.parse_expression().unwrap_err();
+        let err = parser.expression().unwrap_err();
         assert!(matches!(err, Error::InvalidAssignmentTarget(..)));
     }
 }

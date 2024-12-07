@@ -40,7 +40,8 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_expression_instruction(&mut self) -> Result<Option<Instruction>, Error> {
-        let expression = self.parse_expression()?;
+        let expression = self.expression()?;
+        //TODO: if expression is not an assignment or function call, invalid
         match self.lexer.next() {
             Some(Token::Semicolon(_)) => Ok(Some(Instruction::Expression(expression))),
             Some(token) => Err(Error::UnexpectedToken(token)),

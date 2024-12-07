@@ -2,16 +2,13 @@ mod expression;
 
 use crate::error::Error;
 use crate::parser::{Expression, Instruction};
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::{Stdout, Write};
-use std::rc::Rc;
 
-type VariableReference = Rc<RefCell<Variable>>;
 type Variable = i32;
 
 pub(crate) struct Interpreter<W: Write = Stdout> {
-    variables: HashMap<String, VariableReference>,
+    variables: HashMap<String, Variable>,
     output: W,
 }
 

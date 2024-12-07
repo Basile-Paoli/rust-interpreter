@@ -27,7 +27,7 @@ impl Iterator for Lexer<'_> {
         self.chars.next().and_then(|char| match char {
             ' ' => self.whitespace(),
             '\n' | '\r' => self.line_break(char),
-            ';' => Some(self.semicolon()),
+            ';' | '(' | ')' => Some(self.single_char_token(char)),
             '0'..='9' => Some(self.number(char)),
             '+' | '-' | '*' | '/' => Some(self.operator(char)),
             'a'..='z' | 'A'..='Z' | '_' => Some(self.word(char)),
@@ -53,10 +53,15 @@ impl<'a> Lexer<'a> {
         self.next()
     }
 
-    fn semicolon(&mut self) -> Token {
+    fn single_char_token(&mut self, char: char) -> Token {
         let position = self.position;
         self.position.column += 1;
-        Semicolon(position)
+        match char {
+            ';' => Semicolon(position),
+            '(' => LParen(position),
+            ')' => RParen(position),
+            _ => unreachable!(),
+        }
     }
 
     fn unknown_token(&self, char: char) -> Token {
