@@ -24,38 +24,35 @@ impl AstDisplay for Instruction {
 
 impl AstDisplay for Expression {
     fn ast_fmt(&self, f: &mut std::fmt::Formatter<'_>, indent: usize) -> std::fmt::Result {
-        write!(f, "{:indent$}Expression: \n", "", indent = indent)?;
         match self {
-            Expression::BinOp(binop) => binop.ast_fmt(f, indent + INDENT_SIZE),
-            Expression::Int(int) => int.ast_fmt(f, indent + INDENT_SIZE),
-            Expression::Assignment(assignment) => assignment.ast_fmt(f, indent + INDENT_SIZE),
-            Expression::LValue(lvalue) => lvalue.ast_fmt(f, indent + INDENT_SIZE),
+            Expression::BinOp(binop) => binop.ast_fmt(f, indent),
+            Expression::Int(int) => int.ast_fmt(f, indent),
+            Expression::Assignment(assignment) => assignment.ast_fmt(f, indent),
+            Expression::LValue(lvalue) => lvalue.ast_fmt(f, indent),
         }
     }
 }
 
 impl AstDisplay for Assignment {
     fn ast_fmt(&self, f: &mut std::fmt::Formatter<'_>, indent: usize) -> std::fmt::Result {
-        write!(f, "{:indent$}Assignment: \n", "", indent = indent)?;
         write!(
             f,
-            "{:indent$}Operator: {:?}\n",
+            "{:indent$}Assignment{}:\n",
             "",
-            self.op,
-            indent = indent + INDENT_SIZE
+            self.op
+                .map(|op| format!(" ({})", op))
+                .unwrap_or("".to_string()),
+            indent = indent
         )?;
-        write!(f, "{:indent$}Left: \n", "", indent = indent + INDENT_SIZE)?;
-        (*self.left).ast_fmt(f, indent + INDENT_SIZE * 2)?;
-        write!(f, "{:indent$}Right: \n", "", indent = indent + INDENT_SIZE)?;
-        self.right.ast_fmt(f, indent + INDENT_SIZE * 2)
+        (*self.left).ast_fmt(f, indent + INDENT_SIZE)?;
+        self.right.ast_fmt(f, indent + INDENT_SIZE)
     }
 }
 
 impl AstDisplay for LValue {
     fn ast_fmt(&self, f: &mut std::fmt::Formatter<'_>, indent: usize) -> std::fmt::Result {
-        write!(f, "{:indent$}LValue: \n", "", indent = indent)?;
         match self {
-            LValue::Identifier(identifier) => identifier.ast_fmt(f, indent + INDENT_SIZE),
+            LValue::Identifier(identifier) => identifier.ast_fmt(f, indent),
         }
     }
 }
@@ -80,17 +77,8 @@ impl AstDisplay for Int {
 
 impl AstDisplay for BinOp {
     fn ast_fmt(&self, f: &mut std::fmt::Formatter<'_>, indent: usize) -> std::fmt::Result {
-        write!(f, "{:indent$}BinOp: \n", "", indent = indent)?;
-        write!(
-            f,
-            "{:indent$}Operator: {:?}\n",
-            "",
-            self.op,
-            indent = indent + INDENT_SIZE
-        )?;
-        write!(f, "{:indent$}Left: \n", "", indent = indent + INDENT_SIZE)?;
-        self.left.ast_fmt(f, indent + INDENT_SIZE * 2)?;
-        write!(f, "{:indent$}Right: \n", "", indent = indent + INDENT_SIZE)?;
-        self.right.ast_fmt(f, indent + INDENT_SIZE * 2)
+        write!(f, "{:indent$}{}: \n", "", self.op, indent = indent)?;
+        self.left.ast_fmt(f, indent + INDENT_SIZE)?;
+        self.right.ast_fmt(f, indent + INDENT_SIZE)
     }
 }
