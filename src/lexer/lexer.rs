@@ -30,9 +30,8 @@ impl Iterator for Lexer<'_> {
             ';' | '(' | ')' => Some(self.single_char_token(char)),
             '0'..='9' => Some(self.number(char)),
             '+' | '-' | '*' | '/' => Some(self.operator(char)),
-            'a'..='z' | 'A'..='Z' | '_' => Some(self.word(char)),
             '=' => Some(self.equal_sign()),
-            _ => Some(self.unknown_token(char)),
+            _ => Some(self.word(char)),
         })
     }
 }
@@ -64,10 +63,6 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn unknown_token(&self, char: char) -> Token {
-        Unknown(char, self.position)
-    }
-
     fn number(&mut self, char: char) -> Token {
         let position = self.position;
 
@@ -75,9 +70,18 @@ impl<'a> Lexer<'a> {
         while let Some(c) = self.chars.next_if(|c| c.is_ascii_digit()) {
             num.push(c);
         }
+
+        if let Some('.') = self.chars.peek() {
+            num.push(self.chars.next().unwrap());
+            while let Some(c) = self.chars.next_if(|c| c.is_ascii_digit()) {
+                num.push(c);
+            }
+            self.position.column += num.graphemes(true).count() as i32;
+            return Float(num.parse().unwrap(), position);
+        }
         self.position.column += num.graphemes(true).count() as i32;
 
-        Number(num.parse().unwrap(), position)
+        Int(num.parse().unwrap(), position)
     }
 
     fn operator(&mut self, char: char) -> Token {
@@ -104,10 +108,7 @@ impl<'a> Lexer<'a> {
     fn word(&mut self, char: char) -> Token {
         let position = self.position;
         let mut word = char.to_string();
-        while let Some(c) = self
-            .chars
-            .next_if(|c| c.is_ascii_alphanumeric() || *c == '_')
-        {
+        while let Some(c) = self.chars.next_if(|c| is_valid_variable_char(*c)) {
             word.push(c);
         }
         self.position.column += word.graphemes(true).count() as i32;
@@ -131,15 +132,28 @@ impl<'a> Lexer<'a> {
     }
 }
 
+// A variable can contain any character that is not a reserved character
+fn is_valid_variable_char(c: char) -> bool {
+    let reserved_chars = ['+', '-', '*', '/', '=', '(', ')', ';', '\n', '\r', ' '];
+    !reserved_chars.contains(&c)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
     use crate::lexer::token::Keyword;
 
     #[test]
-    fn number() {
+    fn int() {
         let mut l = Lexer::new("234");
-        assert_eq!(l.next().unwrap(), Number(234, Position::new()));
+        assert_eq!(l.next().unwrap(), Int(234, Position::new()));
+        assert_eq!(l.next(), None);
+    }
+
+    #[test]
+    fn float() {
+        let mut l = Lexer::new("234.567");
+        assert_eq!(l.next().unwrap(), Float(234.567, Position::new()));
         assert_eq!(l.next(), None);
     }
 
@@ -168,15 +182,29 @@ mod test {
     }
 
     #[test]
-    fn keyword() {
-        let mut l = Lexer::new("if");
-        assert_eq!(l.next().unwrap(), Keyword(Keyword::IF, Position::new()));
+    fn identifier_with_number() {
+        let mut l = Lexer::new("abc123");
+        assert_eq!(
+            l.next().unwrap(),
+            Identifier("abc123".to_string(), Position::new())
+        );
         assert_eq!(l.next(), None);
     }
 
     #[test]
-    fn unknown_token() {
-        let mut l = Lexer::new("命");
-        assert_eq!(l.next().unwrap(), Unknown('命', Position::new()));
+    fn identifier_with_japanese() {
+        let mut l = Lexer::new("あいうえお");
+        assert_eq!(
+            l.next().unwrap(),
+            Identifier("あいうえお".to_string(), Position::new())
+        );
+        assert_eq!(l.next(), None);
+    }
+
+    #[test]
+    fn keyword() {
+        let mut l = Lexer::new("if");
+        assert_eq!(l.next().unwrap(), Keyword(Keyword::IF, Position::new()));
+        assert_eq!(l.next(), None);
     }
 }

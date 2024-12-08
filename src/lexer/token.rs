@@ -10,10 +10,10 @@ pub enum Token {
     RParen(Position),
     Op(Op, Position),
     Assignment(Option<Op>, Position),
-    Number(i32, Position),
+    Int(i32, Position),
+    Float(f64, Position),
     Identifier(String, Position),
     Keyword(Keyword, Position),
-    Unknown(char, Position),
 }
 
 impl Display for Token {
@@ -27,10 +27,10 @@ impl Display for Token {
                 Some(op) => write!(f, "Assignment({}) at {}", op, p),
                 None => write!(f, "Assignment at {}", p),
             },
-            Token::Number(n, p) => write!(f, "Number({}) at {}", n, p),
+            Token::Int(n, p) => write!(f, "Int({}) at {}", n, p),
+            Token::Float(n, p) => write!(f, "Float({}) at {}", n, p),
             Token::Identifier(s, p) => write!(f, "Identifier({}) at {}", s, p),
             Token::Keyword(k, p) => write!(f, "Keyword({}) at {}", k, p),
-            Token::Unknown(c, p) => write!(f, "Unknown({}) at {}", c, p),
         }
     }
 }
@@ -58,6 +58,7 @@ impl Display for Op {
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Keyword {
+    LET,
     IF,
     ELSE,
     FOR,
@@ -67,6 +68,7 @@ pub enum Keyword {
 impl Display for Keyword {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Keyword::LET => write!(f, "let"),
             Keyword::IF => write!(f, "if"),
             Keyword::ELSE => write!(f, "else"),
             Keyword::FOR => write!(f, "for"),
@@ -77,6 +79,7 @@ impl Display for Keyword {
 
 lazy_static! {
     pub static ref KEYWORDS: HashMap<&'static str, Keyword> = HashMap::from([
+        ("let", Keyword::LET),
         ("if", Keyword::IF),
         ("else", Keyword::ELSE),
         ("for", Keyword::FOR),

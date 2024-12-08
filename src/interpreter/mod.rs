@@ -1,19 +1,38 @@
 mod expression;
+mod operators;
+mod var_dec;
+mod type_cast;
 
 use crate::error::Error;
 use crate::parser::{Expression, Instruction};
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::io::{Stdout, Write};
 
-type Variable = i32;
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(super) enum Variable {
+    Int(i32),
+    Float(f64),
+    Empty,
+}
 
-pub(crate) struct Interpreter<W: Write = Stdout> {
+impl Display for Variable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Variable::Int(i) => write!(f, "{}", i),
+            Variable::Float(fl) => write!(f, "{}", fl),
+            Variable::Empty => write!(f, "(empty)"),
+        }
+    }
+}
+
+pub(super) struct Interpreter<W: Write = Stdout> {
     variables: HashMap<String, Variable>,
     output: W,
 }
 
 impl Interpreter {
-    pub fn new() -> Interpreter<Stdout> {
+    pub fn new() -> Interpreter {
         Interpreter {
             variables: HashMap::new(),
             output: std::io::stdout(),
@@ -32,6 +51,7 @@ impl<W: Write> Interpreter<W> {
     fn instruction(&mut self, instruction: Instruction) -> Result<(), Error> {
         match instruction {
             Instruction::Expression(expression) => self.expression_instruction(expression),
+            Instruction::VariableDeclaration(declaration) => self.var_dec(declaration),
         }
     }
 
@@ -47,7 +67,7 @@ impl<W: Write> Interpreter<W> {
 
 #[cfg(test)]
 mod test {
-    use super::*;
+    use super::{HashMap, Interpreter};
     use crate::parser::Parser;
     use std::io::Cursor;
 

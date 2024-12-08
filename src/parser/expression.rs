@@ -6,29 +6,36 @@ use Op::*;
 pub enum Expression {
     BinOp(BinOp),
     Int(Int),
+    Float(Float),
     Assignment(Assignment),
     LValue(LValue),
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct BinOp {
-    pub(crate) op: Op,
-    pub(crate) left: Box<Expression>,
-    pub(crate) right: Box<Expression>,
+    pub op: Op,
+    pub left: Box<Expression>,
+    pub right: Box<Expression>,
     position: Position,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Int {
-    pub(crate) value: i32,
-    pub(crate) position: Position,
+    pub value: i32,
+    pub position: Position,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Float {
+    pub value: f64,
+    pub position: Position,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Assignment {
-    pub(crate) left: Box<LValue>,
-    pub(crate) right: Box<Expression>,
-    pub(crate) op: Option<Op>,
+    pub left: Box<LValue>,
+    pub right: Box<Expression>,
+    pub op: Option<Op>,
     position: Position,
 }
 
@@ -39,8 +46,8 @@ pub enum LValue {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Identifier {
-    pub(crate) name: String,
-    position: Position,
+    pub name: String,
+    pub position: Position,
 }
 
 impl Parser<'_> {
@@ -109,7 +116,8 @@ impl Parser<'_> {
         self.lexer
             .next()
             .map_or(Err(Error::UnexpectedEof), |token| match token {
-                Token::Number(value, position) => Ok(Expression::Int(Int { value, position })),
+                Token::Int(value, position) => Ok(Expression::Int(Int { value, position })),
+                Token::Float(value, position) => Ok(Expression::Float(Float { value, position })),
                 Token::Identifier(name, position) => {
                     Ok(Expression::LValue(LValue::Identifier(Identifier {
                         name,
