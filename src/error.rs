@@ -8,8 +8,10 @@ pub enum Error {
     InvalidAssignmentTarget(Position),
     UnexpectedEof,
     DivisionByZero,
+    IoError,
     VariableNotFound(String),
     TypeMismatch(Variable, Variable),
+    VariableAlreadyExists(String),
 }
 
 impl Display for Error {
@@ -21,10 +23,27 @@ impl Display for Error {
             }
             Error::UnexpectedEof => write!(f, "Unexpected end of file"),
             Error::DivisionByZero => write!(f, "Division by zero"),
+            Error::IoError => write!(f, "I/O error"),
             Error::VariableNotFound(name) => write!(f, "Variable not found: {}", name),
             Error::TypeMismatch(left, right) => {
-                write!(f, "Type mismatch: {} and {}", left, right)
+                write!(
+                    f,
+                    "Type mismatch: {} {} and {} {}",
+                    var_type(left),
+                    left,
+                    var_type(right),
+                    right
+                )
             }
+            Error::VariableAlreadyExists(name) => write!(f, "Variable already exists: {}", name),
         }
+    }
+}
+
+fn var_type(var: &Variable) -> &'static str {
+    match var {
+        Variable::Int(_) => "Int",
+        Variable::Float(_) => "Float",
+        Variable::Empty => "Empty",
     }
 }

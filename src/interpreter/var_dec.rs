@@ -10,8 +10,10 @@ impl<W: Write> Interpreter<W> {
             None => Variable::Empty,
         };
 
-        self.variables.insert(declaration.name, val);
-        Ok(())
+        match self.variables.insert(declaration.name.clone(), val) {
+            Some(_) => Err(Error::VariableAlreadyExists(declaration.name)),
+            None => Ok(()),
+        }
     }
 }
 
@@ -43,5 +45,18 @@ mod test {
 
         i.run(instructions).unwrap();
         assert_eq!(i.variables.get("x").unwrap(), &Variable::Empty);
+    }
+
+    #[test]
+    fn test_var_dec_error() {
+        use super::Interpreter;
+        use crate::parser::Parser;
+
+        let mut p = Parser::new("let x = 2; let x = 3;");
+        let instructions = p.parse().unwrap();
+        let mut i = Interpreter::new();
+
+        let result = i.run(instructions);
+        assert!(result.is_err());
     }
 }

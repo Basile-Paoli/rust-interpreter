@@ -1,43 +1,50 @@
 use crate::error::Error;
+use crate::interpreter::type_cast::cast_to_float;
 use crate::interpreter::Variable;
 
 pub fn addition(left: Variable, right: Variable) -> Result<Variable, Error> {
     match (left, right) {
         (Variable::Int(l), Variable::Int(r)) => Ok(Variable::Int(l + r)),
-        (Variable::Float(l), Variable::Float(r)) => Ok(Variable::Float(l + r)),
-        (Variable::Int(l), Variable::Float(r)) => Ok(Variable::Float(l as f64 + r)),
-        (Variable::Float(l), Variable::Int(r)) => Ok(Variable::Float(l + r as f64)),
-        _ => Err(Error::TypeMismatch(left, right)),
+        _ => float_addition(left, right),
     }
+}
+
+fn float_addition(left: Variable, right: Variable) -> Result<Variable, Error> {
+    let a = cast_to_float(left).ok_or(Error::TypeMismatch(left, right))?;
+    let b = cast_to_float(right).ok_or(Error::TypeMismatch(left, right))?;
+    Ok(Variable::Float(a + b))
 }
 
 pub fn subtraction(left: Variable, right: Variable) -> Result<Variable, Error> {
     match (left, right) {
         (Variable::Int(l), Variable::Int(r)) => Ok(Variable::Int(l - r)),
-        (Variable::Float(l), Variable::Float(r)) => Ok(Variable::Float(l - r)),
-        (Variable::Int(l), Variable::Float(r)) => Ok(Variable::Float(l as f64 - r)),
-        (Variable::Float(l), Variable::Int(r)) => Ok(Variable::Float(l - r as f64)),
-        _ => Err(Error::TypeMismatch(left, right)),
+        _ => float_subtraction(left, right),
     }
+}
+
+fn float_subtraction(left: Variable, right: Variable) -> Result<Variable, Error> {
+    let a = cast_to_float(left).ok_or(Error::TypeMismatch(left, right))?;
+    let b = cast_to_float(right).ok_or(Error::TypeMismatch(left, right))?;
+    Ok(Variable::Float(a - b))
 }
 
 pub fn multiplication(left: Variable, right: Variable) -> Result<Variable, Error> {
     match (left, right) {
         (Variable::Int(l), Variable::Int(r)) => Ok(Variable::Int(l * r)),
-        (Variable::Float(l), Variable::Float(r)) => Ok(Variable::Float(l * r)),
-        (Variable::Int(l), Variable::Float(r)) => Ok(Variable::Float(l as f64 * r)),
-        (Variable::Float(l), Variable::Int(r)) => Ok(Variable::Float(l * r as f64)),
-        _ => Err(Error::TypeMismatch(left, right)),
+        _ => float_multiplication(left, right),
     }
+}
+
+fn float_multiplication(left: Variable, right: Variable) -> Result<Variable, Error> {
+    let a = cast_to_float(left).ok_or(Error::TypeMismatch(left, right))?;
+    let b = cast_to_float(right).ok_or(Error::TypeMismatch(left, right))?;
+    Ok(Variable::Float(a * b))
 }
 
 pub fn division(left: Variable, right: Variable) -> Result<Variable, Error> {
     match (left, right) {
         (Variable::Int(l), Variable::Int(r)) => int_division(l, r),
-        (Variable::Float(l), Variable::Float(r)) => float_division(l, r),
-        (Variable::Int(l), Variable::Float(r)) => float_division(l as f64, r),
-        (Variable::Float(l), Variable::Int(r)) => float_division(l, r as f64),
-        _ => Err(Error::TypeMismatch(left, right)),
+        _ => float_division(left, right),
     }
 }
 
@@ -49,11 +56,13 @@ fn int_division(left: i32, right: i32) -> Result<Variable, Error> {
     }
 }
 
-fn float_division(left: f64, right: f64) -> Result<Variable, Error> {
-    if right == 0.0 {
+fn float_division(left: Variable, right: Variable) -> Result<Variable, Error> {
+    let a = cast_to_float(left).ok_or(Error::TypeMismatch(left, right))?;
+    let b = cast_to_float(right).ok_or(Error::TypeMismatch(left, right))?;
+    if b == 0.0 {
         Err(Error::DivisionByZero)
     } else {
-        Ok(Variable::Float(left / right))
+        Ok(Variable::Float(a / b))
     }
 }
 

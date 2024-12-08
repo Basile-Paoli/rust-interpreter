@@ -1,7 +1,7 @@
 mod expression;
 mod operators;
-mod var_dec;
 mod type_cast;
+mod var_dec;
 
 use crate::error::Error;
 use crate::parser::{Expression, Instruction};
@@ -58,9 +58,9 @@ impl<W: Write> Interpreter<W> {
     fn expression_instruction(&mut self, expression: Expression) -> Result<(), Error> {
         match expression.clone() {
             Expression::Assignment(_) => self.expression(expression).map(|_| ()),
-            _ => self.expression(expression).map(|result| {
-                writeln!(self.output, "{}", result).unwrap_or(());
-            }),
+            _ => self
+                .expression(expression)
+                .and_then(|result| writeln!(self.output, "{}", result).map_err(|_| Error::IoError)),
         }
     }
 }
