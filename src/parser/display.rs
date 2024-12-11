@@ -1,4 +1,4 @@
-use crate::parser::expression::Float;
+use crate::parser::expression::{ArrayLit, Float, StringLit};
 use crate::parser::{
     Assignment, BinOp, Expression, Identifier, Instruction, Int, LValue, VariableDeclaration,
 };
@@ -34,8 +34,10 @@ impl AstDisplay for Expression {
             Expression::BinOp(binop) => binop.ast_fmt(f, indent),
             Expression::Int(int) => int.ast_fmt(f, indent),
             Expression::Float(float) => float.ast_fmt(f, indent),
+            Expression::StringLit(string) => string.ast_fmt(f, indent),
             Expression::Assignment(assignment) => assignment.ast_fmt(f, indent),
             Expression::LValue(lvalue) => lvalue.ast_fmt(f, indent),
+            Expression::Array(a) => a.ast_fmt(f, indent),
         }
     }
 }
@@ -81,6 +83,22 @@ impl AstDisplay for Float {
     }
 }
 
+impl AstDisplay for StringLit {
+    fn ast_fmt(&self, f: &mut std::fmt::Formatter<'_>, indent: usize) -> std::fmt::Result {
+        write!(f, "{:indent$}String: {}\n", "", self.value)
+    }
+}
+
+impl AstDisplay for ArrayLit {
+    fn ast_fmt(&self, f: &mut std::fmt::Formatter<'_>, indent: usize) -> std::fmt::Result {
+        write!(f, "{:indent$}Array:\n", "")?;
+        for element in &self.elements {
+            element.ast_fmt(f, indent + INDENT_SIZE)?;
+        }
+        Ok(())
+    }
+}
+
 impl AstDisplay for BinOp {
     fn ast_fmt(&self, f: &mut std::fmt::Formatter<'_>, indent: usize) -> std::fmt::Result {
         write!(f, "{:indent$}{}: \n", "", self.op)?;
@@ -92,10 +110,6 @@ impl AstDisplay for BinOp {
 impl AstDisplay for VariableDeclaration {
     fn ast_fmt(&self, f: &mut std::fmt::Formatter<'_>, indent: usize) -> std::fmt::Result {
         write!(f, "{:indent$}VariableDeclaration: {}\n", "", self.name)?;
-        if let Some(value) = &self.value {
-            value.ast_fmt(f, indent + INDENT_SIZE)
-        } else {
-            Ok(())
-        }
+        self.value.ast_fmt(f, indent + INDENT_SIZE)
     }
 }

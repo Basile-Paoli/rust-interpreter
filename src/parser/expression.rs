@@ -1,4 +1,8 @@
+use crate::interpreter::VarType;
 use crate::lexer::{Op, Position, Token};
+use crate::parser::type_analysis::{
+    array_lit_type, div_type, minus_type, mul_type, operation_type, plus_type,
+};
 use crate::parser::{Error, Parser};
 use Op::*;
 
@@ -7,8 +11,24 @@ pub enum Expression {
     BinOp(BinOp),
     Int(Int),
     Float(Float),
+    StringLit(StringLit),
+    Array(ArrayLit),
     Assignment(Assignment),
     LValue(LValue),
+}
+
+impl Expression {
+    pub(crate) fn expr_type(&self) -> VarType {
+        match self {
+            Expression::BinOp(binop) => binop.res_type.clone(),
+            Expression::Int(_) => VarType::Int,
+            Expression::Float(_) => VarType::Float,
+            Expression::StringLit(_) => VarType::String,
+            Expression::Array(array) => VarType::Array(Box::new(array.array_type.clone())),
+            Expression::Assignment(assignment) => assignment.var_type.clone(),
+            Expression::LValue(lvalue) => lvalue.var_type(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -17,6 +37,7 @@ pub struct BinOp {
     pub left: Box<Expression>,
     pub right: Box<Expression>,
     position: Position,
+    res_type: VarType,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -32,11 +53,25 @@ pub struct Float {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct StringLit {
+    pub value: String,
+    pub position: Position,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ArrayLit {
+    pub elements: Vec<Expression>,
+    pub position: Position,
+    pub array_type: VarType,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct Assignment {
     pub left: Box<LValue>,
     pub right: Box<Expression>,
     pub op: Option<Op>,
     position: Position,
+    var_type: VarType,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -44,10 +79,19 @@ pub enum LValue {
     Identifier(Identifier),
 }
 
+impl LValue {
+    fn var_type(&self) -> VarType {
+        match self {
+            LValue::Identifier(id) => id.var_type.clone(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Identifier {
     pub name: String,
     pub position: Position,
+    pub var_type: VarType,
 }
 
 impl Parser<'_> {
@@ -60,20 +104,36 @@ impl Parser<'_> {
         if let Some(Token::Assignment(op, position)) =
             self.lexer.next_if(|t| matches!(t, Token::Assignment(..)))
         {
-            match left {
+            match &left {
                 Expression::LValue(lvalue) => {
-                    let right = self.add()?;
-                    left = Expression::Assignment(Assignment {
-                        left: Box::new(lvalue),
-                        right: Box::new(right),
-                        op,
-                        position,
-                    });
+                    left = self.new_assignment(op, position, lvalue)?;
                 }
                 _ => return Err(Error::InvalidAssignmentTarget(position)),
             }
         }
         Ok(left)
+    }
+
+    fn new_assignment(
+        &mut self,
+        op: Option<Op>,
+        position: Position,
+        lvalue: &LValue,
+    ) -> Result<Expression, Error> {
+        let right = self.add()?;
+        let var_type = lvalue.var_type();
+        if let Some(op) = op.clone() {
+            if !(operation_type(op, lvalue.var_type(), right.expr_type())? == var_type) {
+                return Err(Error::TypeMismatch(var_type, right.expr_type()));
+            }
+        }
+        Ok(Expression::Assignment(Assignment {
+            left: Box::new(lvalue.clone()),
+            right: Box::new(right),
+            op,
+            position,
+            var_type,
+        }))
     }
 
     pub fn add(&mut self) -> Result<Expression, Error> {
@@ -84,11 +144,17 @@ impl Parser<'_> {
             .next_if(|t| matches!(t, Token::Op(ADD | SUB, ..)))
         {
             let right = self.mul()?;
+            let res_type = match op {
+                ADD => plus_type(left.expr_type(), right.expr_type())?,
+                SUB => minus_type(left.expr_type(), right.expr_type())?,
+                _ => unreachable!(),
+            };
             left = Expression::BinOp(BinOp {
                 op,
                 left: Box::new(left),
                 right: Box::new(right),
                 position,
+                res_type,
             });
         }
         Ok(left)
@@ -102,11 +168,17 @@ impl Parser<'_> {
             .next_if(|t| matches!(t, Token::Op(MUL | DIV, ..)))
         {
             let right = self.primary()?;
+            let res_type = match op {
+                MUL => mul_type(left.expr_type(), right.expr_type())?,
+                DIV => div_type(left.expr_type(), right.expr_type())?,
+                _ => unreachable!(),
+            };
             left = Expression::BinOp(BinOp {
                 op,
                 left: Box::new(left),
                 right: Box::new(right),
                 position,
+                res_type,
             });
         }
         Ok(left)
@@ -118,15 +190,31 @@ impl Parser<'_> {
             .map_or(Err(Error::UnexpectedEof), |token| match token {
                 Token::Int(value, position) => Ok(Expression::Int(Int { value, position })),
                 Token::Float(value, position) => Ok(Expression::Float(Float { value, position })),
-                Token::Identifier(name, position) => {
-                    Ok(Expression::LValue(LValue::Identifier(Identifier {
-                        name,
-                        position,
-                    })))
+                Token::String(value, position) => {
+                    Ok(Expression::StringLit(StringLit { value, position }))
                 }
+                Token::Identifier(name, position) => self.identifier_expression(name, position),
                 Token::LParen(_) => self.paren_expr(),
+                Token::LBracket(position) => self.array(position),
                 _ => Err(Error::UnexpectedToken(token)),
             })
+    }
+
+    fn identifier_expression(
+        &mut self,
+        name: String,
+        position: Position,
+    ) -> Result<Expression, Error> {
+        let var_type = self.identifiers.get(&name).cloned();
+        if var_type.is_none() {
+            Err(Error::VariableNotFound(name))
+        } else {
+            Ok(Expression::LValue(LValue::Identifier(Identifier {
+                name,
+                position,
+                var_type: var_type.unwrap(),
+            })))
+        }
     }
 
     pub fn paren_expr(&mut self) -> Result<Expression, Error> {
@@ -136,6 +224,24 @@ impl Parser<'_> {
             Some(token) => Err(Error::UnexpectedToken(token)),
             None => Err(Error::UnexpectedEof),
         }
+    }
+
+    pub fn array(&mut self, position: Position) -> Result<Expression, Error> {
+        let mut elements = Vec::new();
+        while !matches!(self.lexer.peek(), Some(Token::RBracket(..))) {
+            let expr = self.expression()?;
+            self.lexer.next_if(|t| matches!(t, Token::Comma(..)));
+            elements.push(expr);
+        }
+        if let None = self.lexer.next_if(|t| matches!(t, Token::RBracket(..))) {
+            return Err(Error::UnexpectedEof);
+        }
+        let array_type = array_lit_type(&mut elements)?;
+        Ok(Expression::Array(ArrayLit {
+            elements,
+            position,
+            array_type,
+        }))
     }
 }
 
@@ -220,5 +326,85 @@ mod test {
         let mut parser = Parser::new(input);
         let err = parser.expression().unwrap_err();
         assert!(matches!(err, Error::InvalidAssignmentTarget(..)));
+    }
+
+    #[test]
+    fn test_array() {
+        let input = "[1, 2, 3]";
+        let mut parser = Parser::new(input);
+        let expr = parser.expression().unwrap();
+        if let Expression::Array(array) = expr {
+            assert_eq!(array.elements.len(), 3);
+            assert!(matches!(
+                array.elements[0],
+                Expression::Int(Int { value: 1, .. })
+            ));
+            assert!(matches!(
+                array.elements[1],
+                Expression::Int(Int { value: 2, .. })
+            ));
+            assert!(matches!(
+                array.elements[2],
+                Expression::Int(Int { value: 3, .. })
+            ));
+        } else {
+            unreachable!("Expected Array node");
+        }
+    }
+
+    #[test]
+    fn test_trailing_comma() {
+        let input = "[1, 2, 3,]";
+        let mut parser = Parser::new(input);
+        let expr = parser.expression().unwrap();
+        if let Expression::Array(array) = expr {
+            assert_eq!(array.elements.len(), 3);
+        } else {
+            unreachable!("Expected Array node");
+        }
+    }
+
+    #[test]
+    fn test_invalid_comma() {
+        let input = "[,]";
+        let mut parser = Parser::new(input);
+        let err = parser.expression().unwrap_err();
+        assert!(matches!(err, Error::UnexpectedToken(..)));
+
+        let input = "[1,,]";
+        let mut parser = Parser::new(input);
+        let err = parser.expression().unwrap_err();
+        assert!(matches!(err, Error::UnexpectedToken(..)));
+    }
+
+    #[test]
+    fn test_nested_array() {
+        let input = "[[1,2], []];";
+
+        let mut parser = Parser::new(input);
+        let expr = parser.expression().unwrap();
+        if let Expression::Array(array) = expr {
+            assert_eq!(array.elements.len(), 2);
+            if let Expression::Array(inner) = &array.elements[0] {
+                assert_eq!(inner.elements.len(), 2);
+                assert!(matches!(
+                    inner.elements[0],
+                    Expression::Int(Int { value: 1, .. })
+                ));
+                assert!(matches!(
+                    inner.elements[1],
+                    Expression::Int(Int { value: 2, .. })
+                ));
+            } else {
+                unreachable!("Expected Array node");
+            }
+            if let Expression::Array(inner) = &array.elements[1] {
+                assert_eq!(inner.elements.len(), 0);
+            } else {
+                unreachable!("Expected Array node");
+            }
+        } else {
+            unreachable!("Expected Array node");
+        }
     }
 }

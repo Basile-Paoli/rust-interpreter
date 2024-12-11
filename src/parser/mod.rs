@@ -1,12 +1,15 @@
 use crate::error::Error;
 use crate::lexer::{Keyword, Lexer, Token};
+use std::collections::HashMap;
 use std::iter::Peekable;
 
 mod display;
 mod expression;
+mod type_analysis;
 mod var_dec;
 
-pub use expression::{Assignment, BinOp, Expression, Identifier, Int, LValue};
+use crate::interpreter::VarType;
+pub use expression::{ArrayLit, Assignment, BinOp, Expression, Identifier, Int, LValue};
 pub use var_dec::VariableDeclaration;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -15,14 +18,16 @@ pub enum Instruction {
     VariableDeclaration(VariableDeclaration),
 }
 
-pub(crate) struct Parser<'a> {
-    pub(crate) lexer: Peekable<Lexer<'a>>,
+pub struct Parser<'a> {
+    pub lexer: Peekable<Lexer<'a>>,
+    pub identifiers: HashMap<String, VarType>,
 }
 
 impl<'a> Parser<'a> {
     pub fn new(input: &str) -> Parser {
         Parser {
             lexer: Lexer::new(input).peekable(),
+            identifiers: HashMap::new(),
         }
     }
 

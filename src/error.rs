@@ -1,4 +1,4 @@
-use crate::interpreter::Variable;
+use crate::interpreter::VarType;
 use crate::lexer::{Position, Token};
 use std::fmt::Display;
 
@@ -10,7 +10,7 @@ pub enum Error {
     DivisionByZero,
     IoError,
     VariableNotFound(String),
-    TypeMismatch(Variable, Variable),
+    TypeMismatch(VarType, VarType),
     VariableAlreadyExists(String),
 }
 
@@ -26,24 +26,9 @@ impl Display for Error {
             Error::IoError => write!(f, "I/O error"),
             Error::VariableNotFound(name) => write!(f, "Variable not found: {}", name),
             Error::TypeMismatch(left, right) => {
-                write!(
-                    f,
-                    "Type mismatch: {} {} and {} {}",
-                    var_type(left),
-                    left,
-                    var_type(right),
-                    right
-                )
+                write!(f, "Type mismatch: {} and {}", left, right)
             }
             Error::VariableAlreadyExists(name) => write!(f, "Variable already exists: {}", name),
         }
-    }
-}
-
-fn var_type(var: &Variable) -> &'static str {
-    match var {
-        Variable::Int(_) => "Int",
-        Variable::Float(_) => "Float",
-        Variable::Empty => "Empty",
     }
 }

@@ -1,14 +1,11 @@
 use crate::error::Error;
-use crate::interpreter::{Interpreter, Variable};
+use crate::interpreter::Interpreter;
 use crate::parser::VariableDeclaration;
 use std::io::Write;
 
 impl<W: Write> Interpreter<W> {
     pub fn var_dec(&mut self, declaration: VariableDeclaration) -> Result<(), Error> {
-        let val = match declaration.value {
-            Some(expression) => self.expression(expression)?,
-            None => Variable::Empty,
-        };
+        let val = self.expression(declaration.value)?;
 
         match self.variables.insert(declaration.name.clone(), val) {
             Some(_) => Err(Error::VariableAlreadyExists(declaration.name)),
@@ -34,18 +31,19 @@ mod test {
         assert_eq!(i.variables.get("x").unwrap(), &Variable::Int(2));
     }
 
-    #[test]
-    fn test_empty_var_dec() {
-        use super::Interpreter;
-        use crate::parser::Parser;
-
-        let mut p = Parser::new("let x;");
-        let instructions = p.parse().unwrap();
-        let mut i = Interpreter::new();
-
-        i.run(instructions).unwrap();
-        assert_eq!(i.variables.get("x").unwrap(), &Variable::Empty);
-    }
+    // TODO Add support for empty variable declarations (once we have type declaration)
+    // #[test]
+    // fn test_empty_var_dec() {
+    //     use super::Interpreter;
+    //     use crate::parser::Parser;
+    //
+    //     let mut p = Parser::new("let x;");
+    //     let instructions = p.parse().unwrap();
+    //     let mut i = Interpreter::new();
+    //
+    //     i.run(instructions).unwrap();
+    //     assert_eq!(i.variables.get("x").unwrap(), &Variable::Empty);
+    // }
 
     #[test]
     fn test_var_dec_error() {

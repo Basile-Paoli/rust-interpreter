@@ -1,30 +1,34 @@
 use crate::error::Error;
 use crate::lexer::{Position, Token};
-use crate::parser::{Expression, Identifier, Instruction, Parser};
+use crate::parser::{Expression, Instruction, Parser};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct VariableDeclaration {
     pub name: String,
-    pub value: Option<Expression>,
+    pub value: Expression,
     pub position: Position,
 }
 
 impl Parser<'_> {
     pub fn parse_variable_declaration(&mut self) -> Result<Instruction, Error> {
-        self.lexer.next();
+        let t = self.lexer.next().unwrap();
         let id = self.identifier()?;
-        let value = if let Some(Token::Assignment(None, _)) = self.lexer.peek() {
-            self.lexer.next();
-            Some(self.expression()?)
-        } else {
-            None
-        };
+
+        let next = self.lexer.next();
+        if !matches!(next, Some(Token::Assignment(_, _))) {
+            return Err(Error::UnexpectedToken(next.unwrap()));
+        }
+
+        let value = self.expression()?;
+
+        self.identifiers.insert(id.clone(), value.expr_type());
+
         match self.lexer.next() {
             Some(Token::Semicolon(_)) => {
                 Ok(Instruction::VariableDeclaration(VariableDeclaration {
-                    name: id.name,
+                    name: id,
                     value,
-                    position: id.position,
+                    position: t.position(),
                 }))
             }
             Some(token) => Err(Error::UnexpectedToken(token)),
@@ -32,9 +36,9 @@ impl Parser<'_> {
         }
     }
 
-    fn identifier(&mut self) -> Result<Identifier, Error> {
-        if let Some(Token::Identifier(name, position)) = self.lexer.next() {
-            Ok(Identifier { name, position })
+    fn identifier(&mut self) -> Result<String, Error> {
+        if let Some(Token::Identifier(name, _position)) = self.lexer.next() {
+            Ok(name)
         } else {
             Err(Error::UnexpectedEof)
         }
