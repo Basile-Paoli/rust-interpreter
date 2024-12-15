@@ -1,10 +1,7 @@
 use crate::interpreter::VarType;
 use crate::lexer::{Op, Position, Token};
-use crate::parser::type_analysis::{
-    array_lit_type, div_type, minus_type, mul_type, operation_type, plus_type,
-};
+use crate::parser::type_analysis::{array_lit_type, operation_type};
 use crate::parser::{Error, Parser};
-use Op::*;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expression {
@@ -18,7 +15,7 @@ pub enum Expression {
 }
 
 impl Expression {
-    pub(crate) fn expr_type(&self) -> VarType {
+    pub fn expr_type(&self) -> VarType {
         match self {
             Expression::BinOp(binop) => binop.res_type.clone(),
             Expression::Int(_) => VarType::Int,
@@ -141,14 +138,10 @@ impl Parser<'_> {
 
         while let Some(Token::Op(op, position)) = self
             .lexer
-            .next_if(|t| matches!(t, Token::Op(ADD | SUB, ..)))
+            .next_if(|t| matches!(t, Token::Op(Op::ADD | Op::SUB, ..)))
         {
             let right = self.mul()?;
-            let res_type = match op {
-                ADD => plus_type(left.expr_type(), right.expr_type())?,
-                SUB => minus_type(left.expr_type(), right.expr_type())?,
-                _ => unreachable!(),
-            };
+            let res_type = operation_type(op, left.expr_type(), right.expr_type())?;
             left = Expression::BinOp(BinOp {
                 op,
                 left: Box::new(left),
@@ -165,14 +158,10 @@ impl Parser<'_> {
 
         while let Some(Token::Op(op, position)) = self
             .lexer
-            .next_if(|t| matches!(t, Token::Op(MUL | DIV, ..)))
+            .next_if(|t| matches!(t, Token::Op(Op::MUL | Op::DIV, ..)))
         {
             let right = self.primary()?;
-            let res_type = match op {
-                MUL => mul_type(left.expr_type(), right.expr_type())?,
-                DIV => div_type(left.expr_type(), right.expr_type())?,
-                _ => unreachable!(),
-            };
+            let res_type = operation_type(op, left.expr_type(), right.expr_type())?;
             left = Expression::BinOp(BinOp {
                 op,
                 left: Box::new(left),
@@ -236,7 +225,7 @@ impl Parser<'_> {
         if let None = self.lexer.next_if(|t| matches!(t, Token::RBracket(..))) {
             return Err(Error::UnexpectedEof);
         }
-        let array_type = array_lit_type(&mut elements)?;
+        let array_type = array_lit_type(&elements)?;
         Ok(Expression::Array(ArrayLit {
             elements,
             position,
@@ -270,7 +259,7 @@ mod test {
         let mut parser = Parser::new(input);
         let expr = parser.expression().unwrap();
         if let Expression::BinOp(binop) = expr {
-            assert_eq!(binop.op, ADD);
+            assert_eq!(binop.op, Op::ADD);
             assert!(matches!(*binop.left, Expression::Int(Int { value: 1, .. })));
             assert!(matches!(
                 *binop.right,
@@ -288,11 +277,11 @@ mod test {
         let expr = parser.expression().unwrap();
 
         if let Expression::BinOp(binop) = expr {
-            assert_eq!(binop.op, ADD);
+            assert_eq!(binop.op, Op::ADD);
             assert!(matches!(*binop.left, Expression::Int(Int { value: 1, .. })));
             assert!(matches!(
                 *binop.right,
-                Expression::BinOp(BinOp { op: MUL, .. })
+                Expression::BinOp(BinOp { op: Op::MUL, .. })
             ));
         } else {
             unreachable!("Expected BinOp node");
@@ -306,10 +295,10 @@ mod test {
         let expr = parser.expression().unwrap();
 
         if let Expression::BinOp(binop) = expr {
-            assert_eq!(binop.op, MUL);
+            assert_eq!(binop.op, Op::MUL);
             assert!(matches!(
                 *binop.left,
-                Expression::BinOp(BinOp { op: ADD, .. })
+                Expression::BinOp(BinOp { op: Op::ADD, .. })
             ));
             assert!(matches!(
                 *binop.right,

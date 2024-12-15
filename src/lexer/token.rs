@@ -19,6 +19,7 @@ pub enum Token {
     RBracket(Position),
     LBracket(Position),
     Comma(Position),
+    Colon(Position),
 }
 
 impl Token {
@@ -38,6 +39,7 @@ impl Token {
             Token::RBracket(p) => *p,
             Token::LBracket(p) => *p,
             Token::Comma(p) => *p,
+            Token::Colon(p) => *p,
         }
     }
 }
@@ -51,6 +53,7 @@ impl Display for Token {
             Token::LBracket(p) => write!(f, "Left Bracket at {}", p),
             Token::RBracket(p) => write!(f, "Right Bracket at {}", p),
             Token::Comma(p) => write!(f, "Comma at {}", p),
+            Token::Colon(p) => write!(f, "Colon at {}", p),
             Token::Op(op, p) => write!(f, "{} at {}", op, p),
             Token::Assignment(op, p) => match op {
                 Some(op) => write!(f, "Assignment({}) at {}", op, p),
@@ -94,6 +97,9 @@ pub enum Keyword {
     ELSE,
     FOR,
     WHILE,
+    INT,
+    FLOAT,
+    STRING,
 }
 
 impl Display for Keyword {
@@ -104,6 +110,9 @@ impl Display for Keyword {
             Keyword::ELSE => write!(f, "else"),
             Keyword::FOR => write!(f, "for"),
             Keyword::WHILE => write!(f, "while"),
+            Keyword::INT => write!(f, "int"),
+            Keyword::FLOAT => write!(f, "float"),
+            Keyword::STRING => write!(f, "string"),
         }
     }
 }
@@ -115,5 +124,8 @@ lazy_static! {
         ("else", Keyword::ELSE),
         ("for", Keyword::FOR),
         ("while", Keyword::WHILE),
+        ("int", Keyword::INT),
+        ("float", Keyword::FLOAT),
+        ("string", Keyword::STRING),
     ]);
 }

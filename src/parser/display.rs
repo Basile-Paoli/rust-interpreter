@@ -110,6 +110,10 @@ impl AstDisplay for BinOp {
 impl AstDisplay for VariableDeclaration {
     fn ast_fmt(&self, f: &mut std::fmt::Formatter<'_>, indent: usize) -> std::fmt::Result {
         write!(f, "{:indent$}VariableDeclaration: {}\n", "", self.name)?;
-        self.value.ast_fmt(f, indent + INDENT_SIZE)
+        if let Some(value) = &self.value {
+            value.ast_fmt(f, indent + INDENT_SIZE)
+        } else {
+            Ok(())
+        }
     }
 }

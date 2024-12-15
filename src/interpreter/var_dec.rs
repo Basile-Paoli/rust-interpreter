@@ -1,11 +1,13 @@
 use crate::error::Error;
-use crate::interpreter::Interpreter;
+use crate::interpreter::{Interpreter, Variable};
 use crate::parser::VariableDeclaration;
 use std::io::Write;
 
 impl<W: Write> Interpreter<W> {
     pub fn var_dec(&mut self, declaration: VariableDeclaration) -> Result<(), Error> {
-        let val = self.expression(declaration.value)?;
+        let val = declaration
+            .value
+            .map_or(Ok(Variable::Empty), |v| Ok(self.expression(v)?))?;
 
         match self.variables.insert(declaration.name.clone(), val) {
             Some(_) => Err(Error::VariableAlreadyExists(declaration.name)),

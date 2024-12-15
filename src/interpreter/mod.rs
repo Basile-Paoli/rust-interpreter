@@ -50,7 +50,7 @@ impl VarType {
 }
 
 impl Variable {
-    pub(crate) fn var_type(&self) -> VarType {
+    pub fn var_type(&self) -> VarType {
         match self {
             Variable::Int(_) => VarType::Int,
             Variable::Float(_) => VarType::Float,

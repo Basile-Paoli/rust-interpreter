@@ -12,6 +12,7 @@ pub enum Error {
     VariableNotFound(String),
     TypeMismatch(VarType, VarType),
     VariableAlreadyExists(String),
+    UnknownVariableType(Position),
 }
 
 impl Display for Error {
@@ -29,6 +30,9 @@ impl Display for Error {
                 write!(f, "Type mismatch: {} and {}", left, right)
             }
             Error::VariableAlreadyExists(name) => write!(f, "Variable already exists: {}", name),
+            Error::UnknownVariableType(position) => {
+                write!(f, "Cannot declare variable without type at {}", position)
+            }
         }
     }
 }

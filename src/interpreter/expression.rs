@@ -67,9 +67,7 @@ impl<W: Write> Interpreter<W> {
         let values = a
             .elements
             .iter()
-            .map(|v| {
-                self.expression(v.clone())
-            })
+            .map(|v| self.expression(v.clone()))
             .collect::<Result<Vec<_>, _>>()?;
         let res = Array::new(values);
         Ok(Variable::Array(Rc::new(RefCell::new(res))))

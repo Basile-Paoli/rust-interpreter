@@ -26,7 +26,7 @@ impl Iterator for Lexer<'_> {
         self.chars.next().and_then(|char| match char {
             ' ' => self.whitespace(),
             '\n' | '\r' => self.line_break(char),
-            ';' | '(' | ')' | '[' | ']' | ',' => Some(self.single_char_token(char)),
+            ';' | '(' | ')' | '[' | ']' | ',' | ':' => Some(self.single_char_token(char)),
             '0'..='9' => Some(self.number(char)),
             '"' => Some(self.string()),
             '+' | '-' | '*' | '/' => Some(self.operator(char)),
@@ -62,6 +62,7 @@ impl<'a> Lexer<'a> {
             '[' => Token::LBracket(position),
             ']' => Token::RBracket(position),
             ',' => Token::Comma(position),
+            ':' => Token::Colon(position),
             _ => unreachable!(),
         }
     }
@@ -153,7 +154,7 @@ impl<'a> Lexer<'a> {
 // A variable can contain any character that is not a reserved character
 fn is_valid_variable_char(c: char) -> bool {
     let reserved_chars = [
-        '+', '-', '*', '/', '=', '(', ')', ';', '\n', '\r', ' ', '"', '[', ']', ',',
+        '+', '-', '*', '/', '=', '(', ')', ';', '\n', '\r', ' ', '"', '[', ']', ',', ':',
     ];
     !reserved_chars.contains(&c)
 }

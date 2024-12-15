@@ -50,11 +50,11 @@ pub fn operation_type(op: Op, a: VarType, b: VarType) -> Result<VarType, Error> 
         Op::SUB => minus_type(a, b),
         Op::MUL => mul_type(a, b),
         Op::DIV => div_type(a, b),
-        Op::EQ => unimplemented!()
+        Op::EQ => unimplemented!(),
     }
 }
 
-pub fn array_lit_type(elements: &mut Vec<Expression>) -> Result<VarType, Error> {
+pub fn array_lit_type(elements: &Vec<Expression>) -> Result<VarType, Error> {
     if elements.is_empty() {
         return Ok(VarType::Empty);
     }
