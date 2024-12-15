@@ -73,11 +73,9 @@ impl Array {
                 self.elem_type.clone(),
             ))
         } else {
-            self.elem_type = if self.elem_type == VarType::Empty {
-                array.elem_type.clone()
-            } else {
-                self.elem_type.clone()
-            };
+            if self.elem_type == VarType::Empty {
+                self.elem_type = array.elem_type.clone();
+            }
             Ok(self.elements = array.elements.clone())
         }
     }
@@ -156,7 +154,9 @@ mod test {
     #[test]
     fn test_push_mismatch() {
         let mut array = Array::new(vec![Variable::Int(1)]);
-        assert!(array.push(Variable::Float(2.0)).is_err());
+
+        let res = array.push(Variable::Float(2.0));
+        assert_eq!(res, Err(Error::TypeMismatch(VarType::Float, VarType::Int)));
     }
 
     #[test]
@@ -176,9 +176,9 @@ mod test {
     fn test_assign_mismatch() {
         let mut array = Array::new(vec![Variable::Int(1)]);
         let other = Array::new(vec![Variable::Float(2.0)]);
-        assert!(array
-            .assign(Variable::Array(Rc::new(RefCell::new(other))).clone())
-            .is_err());
+
+        let res = array.assign(Variable::Array(Rc::new(RefCell::new(other))));
+        assert_eq!(res, Err(Error::TypeMismatch(VarType::Float, VarType::Int)));
     }
 
     #[test]

@@ -99,6 +99,7 @@ fn assign(variable: &mut Variable, res: Variable) -> Result<(), Error> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::interpreter::VarType;
     use crate::parser::Parser;
 
     #[test]
@@ -116,7 +117,7 @@ mod test {
         let mut i = Interpreter::new();
         let expr = p.expression().unwrap();
         let result = i.expression(expr);
-        assert!(result.is_err());
+        assert_eq!(result, Err(Error::DivisionByZero));
     }
 
     #[test]
@@ -128,21 +129,23 @@ mod test {
         assert_eq!(i.variables.get("x").unwrap(), &Variable::Int(5));
     }
 
-    // TODO Add support for empty variable declarations (once we have type declaration)
-    // #[test]
-    // fn test_assignment_to_empty() {
-    //     let mut p = Parser::new("let x; x = 3;");
-    //     let mut i = Interpreter::new();
-    //     let instructions = p.parse().unwrap();
-    //     i.run(instructions).unwrap();
-    //     assert_eq!(i.variables.get("x").unwrap(), &Variable::Int(3));
-    // }
+    #[test]
+    fn test_assignment_to_empty() {
+        let mut p = Parser::new("let x: int; x = 3;");
+        let mut i = Interpreter::new();
+        let instructions = p.parse().unwrap();
+        i.run(instructions).unwrap();
+        assert_eq!(i.variables.get("x").unwrap(), &Variable::Int(3));
+    }
 
     #[test]
     fn test_type_mismatch() {
         let mut p = Parser::new("let x = 3.0; x += \"3.0\";");
         let instructions = p.parse();
-        assert!(instructions.is_err());
+        assert_eq!(
+            instructions,
+            Err(Error::TypeMismatch(VarType::Float, VarType::String))
+        );
     }
 
     #[test]
