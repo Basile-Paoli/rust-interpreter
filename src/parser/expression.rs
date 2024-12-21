@@ -1,14 +1,16 @@
-use crate::interpreter::VarType;
-use crate::lexer::{Op, Position, Token};
+use crate::error::AddPosition;
+use crate::lexer::{Keyword, Op, Position, Token};
 use crate::parser::type_analysis::{array_lit_type, operation_type};
 use crate::parser::{Error, Parser};
+use crate::var_type::VarType;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expression {
     BinOp(BinOp),
-    Int(Int),
-    Float(Float),
-    StringLit(StringLit),
+    Bool(bool, Position),
+    Int(i32, Position),
+    Float(f64, Position),
+    StringLit(String, Position),
     Array(ArrayLit),
     Assignment(Assignment),
     LValue(LValue),
@@ -18,12 +20,26 @@ impl Expression {
     pub fn expr_type(&self) -> VarType {
         match self {
             Expression::BinOp(binop) => binop.res_type.clone(),
-            Expression::Int(_) => VarType::Int,
-            Expression::Float(_) => VarType::Float,
-            Expression::StringLit(_) => VarType::String,
+            Expression::Bool(..) => VarType::Bool,
+            Expression::Int(..) => VarType::Int,
+            Expression::Float(..) => VarType::Float,
+            Expression::StringLit(..) => VarType::String,
             Expression::Array(array) => VarType::Array(Box::new(array.array_type.clone())),
             Expression::Assignment(assignment) => assignment.var_type.clone(),
             Expression::LValue(lvalue) => lvalue.var_type(),
+        }
+    }
+
+    pub fn position(&self) -> Position {
+        match self {
+            Expression::BinOp(binop) => binop.position,
+            Expression::Bool(_, position) => *position,
+            Expression::Int(_, position) => *position,
+            Expression::Float(_, position) => *position,
+            Expression::StringLit(_, position) => *position,
+            Expression::Array(array) => array.position,
+            Expression::Assignment(assignment) => assignment.position,
+            Expression::LValue(lvalue) => lvalue.position(),
         }
     }
 }
@@ -33,26 +49,8 @@ pub struct BinOp {
     pub op: Op,
     pub left: Box<Expression>,
     pub right: Box<Expression>,
-    position: Position,
+    pub(crate) position: Position,
     res_type: VarType,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Int {
-    pub value: i32,
-    pub position: Position,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Float {
-    pub value: f64,
-    pub position: Position,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct StringLit {
-    pub value: String,
-    pub position: Position,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -67,7 +65,7 @@ pub struct Assignment {
     pub left: Box<LValue>,
     pub right: Box<Expression>,
     pub op: Option<Op>,
-    position: Position,
+    pub(crate) position: Position,
     var_type: VarType,
 }
 
@@ -80,6 +78,12 @@ impl LValue {
     fn var_type(&self) -> VarType {
         match self {
             LValue::Identifier(id) => id.var_type.clone(),
+        }
+    }
+
+    fn position(&self) -> Position {
+        match self {
+            LValue::Identifier(id) => id.position,
         }
     }
 }
@@ -120,10 +124,15 @@ impl Parser<'_> {
         let right = self.add()?;
         let var_type = lvalue.var_type();
         if let Some(op) = op.clone() {
-            if !(operation_type(op, lvalue.var_type(), right.expr_type())? == var_type) {
-                return Err(Error::TypeMismatch(var_type, right.expr_type()));
+            let op_type =
+                operation_type(op, lvalue.var_type(), right.expr_type()).map_err_with_pos(position)?;
+            if op_type != var_type {
+                return Err(Error::TypeMismatch(var_type, right.expr_type(), position));
             }
+        } else if var_type != right.expr_type() && right.expr_type().root_type() != VarType::Empty {
+            return Err(Error::TypeMismatch(var_type, right.expr_type(), position));
         }
+
         Ok(Expression::Assignment(Assignment {
             left: Box::new(lvalue.clone()),
             right: Box::new(right),
@@ -141,7 +150,8 @@ impl Parser<'_> {
             .next_if(|t| matches!(t, Token::Op(Op::ADD | Op::SUB, ..)))
         {
             let right = self.mul()?;
-            let res_type = operation_type(op, left.expr_type(), right.expr_type())?;
+            let res_type =
+                operation_type(op, left.expr_type(), right.expr_type()).map_err_with_pos(position)?;
             left = Expression::BinOp(BinOp {
                 op,
                 left: Box::new(left),
@@ -161,7 +171,8 @@ impl Parser<'_> {
             .next_if(|t| matches!(t, Token::Op(Op::MUL | Op::DIV, ..)))
         {
             let right = self.primary()?;
-            let res_type = operation_type(op, left.expr_type(), right.expr_type())?;
+            let res_type =
+                operation_type(op, left.expr_type(), right.expr_type()).map_err_with_pos(position)?;
             left = Expression::BinOp(BinOp {
                 op,
                 left: Box::new(left),
@@ -177,11 +188,11 @@ impl Parser<'_> {
         self.lexer
             .next()
             .map_or(Err(Error::UnexpectedEof), |token| match token {
-                Token::Int(value, position) => Ok(Expression::Int(Int { value, position })),
-                Token::Float(value, position) => Ok(Expression::Float(Float { value, position })),
-                Token::String(value, position) => {
-                    Ok(Expression::StringLit(StringLit { value, position }))
-                }
+                Token::Int(value, position) => Ok(Expression::Int(value, position)),
+                Token::Float(value, position) => Ok(Expression::Float(value, position)),
+                Token::String(value, position) => Ok(Expression::StringLit(value, position)),
+                Token::Keyword(Keyword::FALSE, position) => Ok(Expression::Bool(false, position)),
+                Token::Keyword(Keyword::TRUE, position) => Ok(Expression::Bool(true, position)),
                 Token::Identifier(name, position) => self.identifier_expression(name, position),
                 Token::LParen(_) => self.paren_expr(),
                 Token::LBracket(position) => self.array(position),
@@ -196,7 +207,7 @@ impl Parser<'_> {
     ) -> Result<Expression, Error> {
         let var_type = self.identifiers.get(&name).cloned();
         if var_type.is_none() {
-            Err(Error::VariableNotFound(name))
+            Err(Error::VariableNotFound(name, position))
         } else {
             Ok(Expression::LValue(LValue::Identifier(Identifier {
                 name,
@@ -225,7 +236,7 @@ impl Parser<'_> {
         if let None = self.lexer.next_if(|t| matches!(t, Token::RBracket(..))) {
             return Err(Error::UnexpectedEof);
         }
-        let array_type = array_lit_type(&elements)?;
+        let array_type = array_lit_type(&elements).map_err_with_pos(position)?;
         Ok(Expression::Array(ArrayLit {
             elements,
             position,
@@ -244,13 +255,7 @@ mod test {
         let input = "1";
         let mut parser = Parser::new(input);
         let expr = parser.expression().unwrap();
-        assert_eq!(
-            expr,
-            Expression::Int(Int {
-                value: 1,
-                position: Position { line: 1, column: 1 }
-            })
-        );
+        assert_eq!(expr, Expression::Int(1, Position { line: 1, column: 1 }));
     }
 
     #[test]
@@ -260,11 +265,14 @@ mod test {
         let expr = parser.expression().unwrap();
         if let Expression::BinOp(binop) = expr {
             assert_eq!(binop.op, Op::ADD);
-            assert!(matches!(*binop.left, Expression::Int(Int { value: 1, .. })));
-            assert!(matches!(
+            assert_eq!(
+                *binop.left,
+                Expression::Int(1, Position { line: 1, column: 1 })
+            );
+            assert_eq!(
                 *binop.right,
-                Expression::Int(Int { value: 2, .. })
-            ));
+                Expression::Int(2, Position { line: 1, column: 5 })
+            );
         } else {
             unreachable!("Expected BinOp node");
         }
@@ -278,7 +286,10 @@ mod test {
 
         if let Expression::BinOp(binop) = expr {
             assert_eq!(binop.op, Op::ADD);
-            assert!(matches!(*binop.left, Expression::Int(Int { value: 1, .. })));
+            assert_eq!(
+                *binop.left,
+                Expression::Int(1, Position { line: 1, column: 1 })
+            );
             assert!(matches!(
                 *binop.right,
                 Expression::BinOp(BinOp { op: Op::MUL, .. })
@@ -300,10 +311,16 @@ mod test {
                 *binop.left,
                 Expression::BinOp(BinOp { op: Op::ADD, .. })
             ));
-            assert!(matches!(
+            assert_eq!(
                 *binop.right,
-                Expression::Int(Int { value: 3, .. })
-            ));
+                Expression::Int(
+                    3,
+                    Position {
+                        line: 1,
+                        column: 11
+                    }
+                )
+            );
         } else {
             unreachable!("Expected BinOp node");
         }
@@ -324,18 +341,18 @@ mod test {
         let expr = parser.expression().unwrap();
         if let Expression::Array(array) = expr {
             assert_eq!(array.elements.len(), 3);
-            assert!(matches!(
+            assert_eq!(
                 array.elements[0],
-                Expression::Int(Int { value: 1, .. })
-            ));
-            assert!(matches!(
+                Expression::Int(1, Position { line: 1, column: 2 })
+            );
+            assert_eq!(
                 array.elements[1],
-                Expression::Int(Int { value: 2, .. })
-            ));
-            assert!(matches!(
+                Expression::Int(2, Position { line: 1, column: 5 })
+            );
+            assert_eq!(
                 array.elements[2],
-                Expression::Int(Int { value: 3, .. })
-            ));
+                Expression::Int(3, Position { line: 1, column: 8 })
+            );
         } else {
             unreachable!("Expected Array node");
         }
@@ -376,14 +393,14 @@ mod test {
             assert_eq!(array.elements.len(), 2);
             if let Expression::Array(inner) = &array.elements[0] {
                 assert_eq!(inner.elements.len(), 2);
-                assert!(matches!(
+                assert_eq!(
                     inner.elements[0],
-                    Expression::Int(Int { value: 1, .. })
-                ));
-                assert!(matches!(
+                    Expression::Int(1, Position { line: 1, column: 3 })
+                );
+                assert_eq!(
                     inner.elements[1],
-                    Expression::Int(Int { value: 2, .. })
-                ));
+                    Expression::Int(2, Position { line: 1, column: 5 })
+                );
             } else {
                 unreachable!("Expected Array node");
             }
@@ -395,5 +412,23 @@ mod test {
         } else {
             unreachable!("Expected Array node");
         }
+    }
+
+    #[test]
+    fn test_invalid_assignment_type() {
+        let input = "let x: int = 1; x = 2.0;";
+        let mut parser = Parser::new(input);
+        let res = parser.parse();
+        assert_eq!(
+            res,
+            Err(Error::TypeMismatch(
+                VarType::Int,
+                VarType::Float,
+                Position {
+                    line: 1,
+                    column: 19
+                }
+            ))
+        );
     }
 }

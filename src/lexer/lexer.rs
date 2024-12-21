@@ -3,7 +3,6 @@ use crate::lexer::token::{Op, Token, KEYWORDS};
 use std::iter::Peekable;
 use std::str::Chars;
 use unicode_segmentation::UnicodeSegmentation;
-use Op::*;
 
 #[derive(Debug, Clone)]
 pub struct Lexer<'a> {
@@ -107,10 +106,10 @@ impl<'a> Lexer<'a> {
         let position = self.position;
         self.position.column += 1;
         let op = match char {
-            '+' => ADD,
-            '-' => SUB,
-            '*' => MUL,
-            '/' => DIV,
+            '+' => Op::ADD,
+            '-' => Op::SUB,
+            '*' => Op::MUL,
+            '/' => Op::DIV,
             _ => unreachable!(),
         };
 
@@ -144,7 +143,7 @@ impl<'a> Lexer<'a> {
         match self.chars.next_if(|c| *c == '=') {
             Some(_) => {
                 self.position.column += 1;
-                Token::Op(EQ, position)
+                Token::Op(Op::EQ, position)
             }
             None => Token::Assignment(None, position),
         }
@@ -181,7 +180,7 @@ mod test {
     #[test]
     fn operator() {
         let mut l = Lexer::new("+");
-        assert_eq!(l.next().unwrap(), Token::Op(ADD, Position::new()));
+        assert_eq!(l.next().unwrap(), Token::Op(Op::ADD, Position::new()));
         assert_eq!(l.next(), None);
     }
 
@@ -190,7 +189,7 @@ mod test {
         let mut l = Lexer::new("+=");
         assert_eq!(
             l.next().unwrap(),
-            Token::Assignment(Some(ADD), Position::new())
+            Token::Assignment(Some(Op::ADD), Position::new())
         );
         assert_eq!(l.next(), None);
     }

@@ -7,12 +7,14 @@ mod var_dec;
 use crate::error::Error;
 use crate::interpreter::array::ArrayVariable;
 use crate::parser::{Expression, Instruction};
+use crate::var_type::VarType;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::io::{Stdout, Write};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Variable {
+    Bool(bool),
     Int(i32),
     Float(f64),
     String(String),
@@ -22,6 +24,7 @@ pub enum Variable {
 impl Display for Variable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Variable::Bool(b) => write!(f, "{}", b),
             Variable::Int(i) => write!(f, "{}", i),
             Variable::Float(fl) => write!(f, "{}", fl),
             Variable::String(s) => write!(f, "{}", s),
@@ -31,27 +34,10 @@ impl Display for Variable {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum VarType {
-    Int,
-    Float,
-    String,
-    Empty,
-    Array(Box<VarType>),
-}
-
-impl VarType {
-    pub fn root_type(&self) -> VarType {
-        match self {
-            VarType::Array(t) => t.root_type(),
-            _ => self.clone(),
-        }
-    }
-}
-
 impl Variable {
     pub fn var_type(&self) -> VarType {
         match self {
+            Variable::Bool(_) => VarType::Bool,
             Variable::Int(_) => VarType::Int,
             Variable::Float(_) => VarType::Float,
             Variable::String(_) => VarType::String,
@@ -61,17 +47,6 @@ impl Variable {
     }
 }
 
-impl Display for VarType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            VarType::Int => write!(f, "Int"),
-            VarType::Float => write!(f, "Float"),
-            VarType::String => write!(f, "String"),
-            VarType::Empty => write!(f, "Empty"),
-            VarType::Array(t) => write!(f, "Array<{}>", *t),
-        }
-    }
-}
 pub struct Interpreter<W: Write = Stdout> {
     variables: HashMap<String, Variable>,
     output: W,
@@ -102,11 +77,12 @@ impl<W: Write> Interpreter<W> {
     }
 
     fn expression_instruction(&mut self, expression: Expression) -> Result<(), Error> {
+        let position = expression.position();
         match expression.clone() {
             Expression::Assignment(_) => self.expression(expression).map(|_| ()),
-            _ => self
-                .expression(expression)
-                .and_then(|result| writeln!(self.output, "{}", result).map_err(|_| Error::IoError)),
+            _ => self.expression(expression).and_then(|result| {
+                writeln!(self.output, "{}", result).map_err(|_| Error::IoError(position))
+            }),
         }
     }
 }

@@ -1,4 +1,4 @@
-use crate::error::Error;
+use crate::error::InterpreterError;
 use crate::interpreter::{VarType, Variable};
 use std::cell::{Ref, RefCell};
 use std::fmt::Display;
@@ -34,7 +34,7 @@ impl Array {
         }
     }
 
-    pub fn push(&mut self, value: Variable) -> Result<(), Error> {
+    pub fn push(&mut self, value: Variable) -> Result<(), InterpreterError> {
         match self.elem_type {
             VarType::Empty => {
                 self.elem_type = value.var_type();
@@ -44,7 +44,7 @@ impl Array {
                 if value.var_type() == self.elem_type {
                     Ok(self.elements.push(value))
                 } else {
-                    Err(Error::TypeMismatch(
+                    Err(InterpreterError::TypeMismatch(
                         value.var_type(),
                         self.elem_type.clone(),
                     ))
@@ -53,22 +53,22 @@ impl Array {
         }
     }
 
-    pub fn assign(&mut self, variable: Variable) -> Result<(), Error> {
+    pub fn assign(&mut self, variable: Variable) -> Result<(), InterpreterError> {
         match variable {
             Variable::Array(array) => self.assign_array(array.borrow()),
-            _ => Err(Error::TypeMismatch(
+            _ => Err(InterpreterError::TypeMismatch(
                 variable.var_type(),
                 VarType::Array(Box::new(self.elem_type.clone())),
             )),
         }
     }
 
-    fn assign_array(&mut self, array: Ref<Array>) -> Result<(), Error> {
+    fn assign_array(&mut self, array: Ref<Array>) -> Result<(), InterpreterError> {
         if self.elem_type != VarType::Empty
             && array.elem_type != VarType::Empty
             && array.elem_type != self.elem_type
         {
-            Err(Error::TypeMismatch(
+            Err(InterpreterError::TypeMismatch(
                 array.elem_type.clone(),
                 self.elem_type.clone(),
             ))
@@ -156,7 +156,10 @@ mod test {
         let mut array = Array::new(vec![Variable::Int(1)]);
 
         let res = array.push(Variable::Float(2.0));
-        assert_eq!(res, Err(Error::TypeMismatch(VarType::Float, VarType::Int)));
+        assert_eq!(
+            res,
+            Err(InterpreterError::TypeMismatch(VarType::Float, VarType::Int))
+        );
     }
 
     #[test]
@@ -178,7 +181,10 @@ mod test {
         let other = Array::new(vec![Variable::Float(2.0)]);
 
         let res = array.assign(Variable::Array(Rc::new(RefCell::new(other))));
-        assert_eq!(res, Err(Error::TypeMismatch(VarType::Float, VarType::Int)));
+        assert_eq!(
+            res,
+            Err(InterpreterError::TypeMismatch(VarType::Float, VarType::Int))
+        );
     }
 
     #[test]

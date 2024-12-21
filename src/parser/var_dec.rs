@@ -1,7 +1,7 @@
-use crate::error::Error;
-use crate::interpreter::VarType;
+use crate::error::{AddPosition, Error, InterpreterError};
 use crate::lexer::{Keyword, Position, Token};
 use crate::parser::{Expression, Instruction, Parser};
+use crate::var_type::VarType;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct VariableDeclaration {
@@ -26,7 +26,7 @@ impl Parser<'_> {
         let next = self.lexer.next();
         match next {
             Some(Token::Semicolon(_)) => {
-                return if var_type == VarType::Empty {
+                return if var_type.root_type() == VarType::Empty {
                     Err(Error::UnknownVariableType(t.position()))
                 } else {
                     self.identifiers.insert(id.clone(), var_type.clone());
@@ -45,6 +45,8 @@ impl Parser<'_> {
 
         let value = self.expression()?;
         let expr_type = value.expr_type();
+        let p = t.position();
+        let res_type = infer_type(var_type, expr_type).map_err_with_pos(p)?;
 
         self.identifiers.insert(id.clone(), value.expr_type());
 
@@ -54,7 +56,7 @@ impl Parser<'_> {
                     name: id,
                     value: Some(value),
                     position: t.position(),
-                    var_type: expr_type,
+                    var_type: res_type,
                 }))
             }
             Some(token) => Err(Error::UnexpectedToken(token)),
@@ -101,14 +103,27 @@ impl Parser<'_> {
     }
 }
 
+fn infer_type(explicit_type: VarType, expr_type: VarType) -> Result<VarType, InterpreterError> {
+    if explicit_type.root_type() == VarType::Empty {
+        if expr_type.root_type() == VarType::Empty {
+            return Err(InterpreterError::UnknownVariableType);
+        }
+        Ok(expr_type)
+    } else if expr_type.root_type() == VarType::Empty {
+        if expr_type.depth() > explicit_type.depth() {
+            return Err(InterpreterError::TypeMismatch(explicit_type, expr_type));
+        }
+        Ok(explicit_type)
+    } else if explicit_type == expr_type {
+        Ok(explicit_type)
+    } else {
+        Err(InterpreterError::TypeMismatch(explicit_type, expr_type))
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::interpreter::VarType;
-    use crate::parser::Instruction;
-    use crate::parser::Parser;
-    use crate::parser::VariableDeclaration;
-    use crate::parser::{Expression, Int};
 
     #[test]
     fn test_parse_variable_declaration() {
@@ -116,17 +131,31 @@ mod test {
         let result = p.parse_variable_declaration().unwrap();
         let expected = Instruction::VariableDeclaration(VariableDeclaration {
             name: "x".to_string(),
-            value: Some(Expression::Int(Int {
-                value: 2,
-                position: Position {
+            value: Some(Expression::Int(
+                2,
+                Position {
                     line: 1,
                     column: 14,
                 },
-            })),
+            )),
             position: Position { line: 1, column: 1 },
             var_type: VarType::Int,
         });
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_var_dec_type_mismatch() {
+        let mut p = Parser::new("let x: int = 2.0;");
+        let result = p.parse_variable_declaration();
+        assert_eq!(
+            result,
+            Err(Error::TypeMismatch(
+                VarType::Int,
+                VarType::Float,
+                Position { line: 1, column: 1 }
+            ))
+        );
     }
 
     #[test]
@@ -135,10 +164,7 @@ mod test {
         let result = p.parse_variable_declaration().unwrap();
         let expected = Instruction::VariableDeclaration(VariableDeclaration {
             name: "x".to_string(),
-            value: Some(Expression::Int(Int {
-                value: 2,
-                position: Position { line: 1, column: 9 },
-            })),
+            value: Some(Expression::Int(2, Position { line: 1, column: 9 })),
             position: Position { line: 1, column: 1 },
             var_type: VarType::Int,
         });
@@ -159,6 +185,16 @@ mod test {
     }
 
     #[test]
+    fn test_parse_var_dec_ambiguous_type() {
+        let mut p = Parser::new("let x = [];");
+        let result = p.parse_variable_declaration();
+        assert_eq!(
+            result,
+            Err(Error::UnknownVariableType(Position { line: 1, column: 1 }))
+        );
+    }
+
+    #[test]
     fn test_parse_variable_declaration_array() {
         let mut p = Parser::new("let x: int[] = [2, 3];");
         let result = p.parse_variable_declaration().unwrap();
@@ -176,20 +212,20 @@ mod test {
         };
 
         let expected = vec![
-            Expression::Int(Int {
-                value: 2,
-                position: Position {
+            Expression::Int(
+                2,
+                Position {
                     line: 1,
                     column: 17,
                 },
-            }),
-            Expression::Int(Int {
-                value: 3,
-                position: Position {
+            ),
+            Expression::Int(
+                3,
+                Position {
                     line: 1,
                     column: 20,
                 },
-            }),
+            ),
         ];
         assert_eq!(array.elements, expected);
     }

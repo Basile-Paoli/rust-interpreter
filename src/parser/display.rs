@@ -1,6 +1,6 @@
-use crate::parser::expression::{ArrayLit, Float, StringLit};
+use crate::parser::expression::ArrayLit;
 use crate::parser::{
-    Assignment, BinOp, Expression, Identifier, Instruction, Int, LValue, VariableDeclaration,
+    Assignment, BinOp, Expression, Identifier, Instruction, LValue, VariableDeclaration,
 };
 use std::fmt::Display;
 
@@ -32,9 +32,10 @@ impl AstDisplay for Expression {
     fn ast_fmt(&self, f: &mut std::fmt::Formatter<'_>, indent: usize) -> std::fmt::Result {
         match self {
             Expression::BinOp(binop) => binop.ast_fmt(f, indent),
-            Expression::Int(int) => int.ast_fmt(f, indent),
-            Expression::Float(float) => float.ast_fmt(f, indent),
-            Expression::StringLit(string) => string.ast_fmt(f, indent),
+            Expression::Bool(val, _) => write!(f, "{:indent$}Bool: {}\n", "", val),
+            Expression::Int(int, _) => write!(f, "{:indent$}Int: {}\n", "", int),
+            Expression::Float(val, _) => write!(f, "{:indent$}Float: {}\n", "", val),
+            Expression::StringLit(val, _) => write!(f, "{:indent$}String: {}\n", "", val),
             Expression::Assignment(assignment) => assignment.ast_fmt(f, indent),
             Expression::LValue(lvalue) => lvalue.ast_fmt(f, indent),
             Expression::Array(a) => a.ast_fmt(f, indent),
@@ -68,24 +69,6 @@ impl AstDisplay for LValue {
 impl AstDisplay for Identifier {
     fn ast_fmt(&self, f: &mut std::fmt::Formatter<'_>, indent: usize) -> std::fmt::Result {
         write!(f, "{:indent$}Identifier: {}\n", "", self.name,)
-    }
-}
-
-impl AstDisplay for Int {
-    fn ast_fmt(&self, f: &mut std::fmt::Formatter<'_>, indent: usize) -> std::fmt::Result {
-        write!(f, "{:indent$}Int: {}\n", "", self.value)
-    }
-}
-
-impl AstDisplay for Float {
-    fn ast_fmt(&self, f: &mut std::fmt::Formatter<'_>, indent: usize) -> std::fmt::Result {
-        write!(f, "{:indent$}Float: {}\n", "", self.value)
-    }
-}
-
-impl AstDisplay for StringLit {
-    fn ast_fmt(&self, f: &mut std::fmt::Formatter<'_>, indent: usize) -> std::fmt::Result {
-        write!(f, "{:indent$}String: {}\n", "", self.value)
     }
 }
 

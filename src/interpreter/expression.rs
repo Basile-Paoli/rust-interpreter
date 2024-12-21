@@ -1,7 +1,7 @@
-use crate::error::Error;
+use crate::error::{AddPosition, Error, InterpreterError};
 use crate::interpreter::array::Array;
 use crate::interpreter::operators::{addition, division, multiplication, subtraction};
-use crate::interpreter::type_cast::{cast_to_float, cast_to_int, cast_to_string};
+use crate::interpreter::type_cast::{cast_to_bool, cast_to_float, cast_to_int, cast_to_string};
 use crate::interpreter::{Interpreter, Variable};
 use crate::lexer::Op;
 use crate::parser::{ArrayLit, Assignment, BinOp, Expression, LValue};
@@ -14,9 +14,10 @@ impl<W: Write> Interpreter<W> {
     pub fn expression(&mut self, expression: Expression) -> Result<Variable, Error> {
         match expression {
             Expression::BinOp(binop) => self.binop(binop),
-            Expression::Int(int) => Ok(Variable::Int(int.value)),
-            Expression::Float(float) => Ok(Variable::Float(float.value)),
-            Expression::StringLit(string) => Ok(Variable::String(string.value)),
+            Expression::Bool(val, _) => Ok(Variable::Bool(val)),
+            Expression::Int(val, _) => Ok(Variable::Int(val)),
+            Expression::Float(val, _) => Ok(Variable::Float(val)),
+            Expression::StringLit(val, _) => Ok(Variable::String(val)),
             Expression::Assignment(assignment) => self.assignment(assignment),
             Expression::LValue(lvalue) => Ok(self.lvalue(lvalue)?.clone()),
             Expression::Array(a) => Ok(self.array(a)?.clone()),
@@ -27,12 +28,13 @@ impl<W: Write> Interpreter<W> {
         let left = self.expression(*binop.left)?;
         let right = self.expression(*binop.right)?;
         match binop.op {
-            Op::ADD => Ok(addition(&left, &right)?),
-            Op::SUB => Ok(subtraction(&left, &right)?),
-            Op::MUL => Ok(multiplication(&left, &right)?),
+            Op::ADD => addition(&left, &right),
+            Op::SUB => subtraction(&left, &right),
+            Op::MUL => multiplication(&left, &right),
             Op::DIV => division(&left, &right),
             Op::EQ => Ok(Variable::Int((left == right) as i32)),
         }
+        .map_err_with_pos(binop.position)
     }
 
     fn assignment(&mut self, assignment: Assignment) -> Result<Variable, Error> {
@@ -40,14 +42,15 @@ impl<W: Write> Interpreter<W> {
         let left = self.lvalue(*assignment.left)?;
 
         let result = match assignment.op {
-            Some(Op::ADD) => addition(&left, &right)?,
-            Some(Op::SUB) => subtraction(&left, &right)?,
-            Some(Op::MUL) => multiplication(&left, &right)?,
-            Some(Op::DIV) => division(&left, &right)?,
-            None => right,
+            Some(Op::ADD) => addition(&left, &right),
+            Some(Op::SUB) => subtraction(&left, &right),
+            Some(Op::MUL) => multiplication(&left, &right),
+            Some(Op::DIV) => division(&left, &right),
+            None => Ok(right),
             _ => unreachable!(),
-        };
-        assign(left, result)?;
+        }
+        .map_err_with_pos(assignment.position)?;
+        assign(left, result).map_err_with_pos(assignment.position)?;
         Ok(left.clone())
     }
 
@@ -57,7 +60,7 @@ impl<W: Write> Interpreter<W> {
                 let name = identifier.name;
                 match self.variables.entry(name.clone()) {
                     Entry::Occupied(o) => Ok(o.into_mut()),
-                    Entry::Vacant(_) => Err(Error::VariableNotFound(name)),
+                    Entry::Vacant(_) => Err(Error::VariableNotFound(name, identifier.position)),
                 }
             }
         }
@@ -74,9 +77,13 @@ impl<W: Write> Interpreter<W> {
     }
 }
 
-fn assign(variable: &mut Variable, res: Variable) -> Result<(), Error> {
+fn assign(variable: &mut Variable, res: Variable) -> Result<(), InterpreterError> {
     match variable {
         Variable::Empty => *variable = res,
+        Variable::Bool(_) => {
+            let val = cast_to_bool(&res)?;
+            *variable = Variable::Bool(val);
+        }
         Variable::Float(_) => {
             let val = cast_to_float(&res)?;
             *variable = Variable::Float(val);
@@ -100,6 +107,7 @@ fn assign(variable: &mut Variable, res: Variable) -> Result<(), Error> {
 mod test {
     use super::*;
     use crate::interpreter::VarType;
+    use crate::lexer::Position;
     use crate::parser::Parser;
 
     #[test]
@@ -117,7 +125,10 @@ mod test {
         let mut i = Interpreter::new();
         let expr = p.expression().unwrap();
         let result = i.expression(expr);
-        assert_eq!(result, Err(Error::DivisionByZero));
+        assert_eq!(
+            result,
+            Err(Error::DivisionByZero(Position { line: 1, column: 3 }))
+        );
     }
 
     #[test]
@@ -144,7 +155,14 @@ mod test {
         let instructions = p.parse();
         assert_eq!(
             instructions,
-            Err(Error::TypeMismatch(VarType::Float, VarType::String))
+            Err(Error::TypeMismatch(
+                VarType::Float,
+                VarType::String,
+                Position {
+                    line: 1,
+                    column: 16
+                }
+            ))
         );
     }
 

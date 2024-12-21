@@ -6,6 +6,7 @@ mod error;
 mod interpreter;
 mod lexer;
 mod parser;
+mod var_type;
 
 fn main() {
     let args = env::args().collect::<Vec<_>>();

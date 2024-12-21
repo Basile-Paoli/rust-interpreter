@@ -10,7 +10,10 @@ impl<W: Write> Interpreter<W> {
             .map_or(Ok(Variable::Empty), |v| self.expression(v))?;
 
         match self.variables.insert(declaration.name.clone(), val) {
-            Some(_) => Err(Error::VariableAlreadyExists(declaration.name)),
+            Some(_) => Err(Error::VariableAlreadyExists(
+                declaration.name,
+                declaration.position,
+            )),
             None => Ok(()),
         }
     }
@@ -18,6 +21,7 @@ impl<W: Write> Interpreter<W> {
 
 #[cfg(test)]
 mod test {
+    use crate::lexer::Position;
     use super::*;
 
     #[test]
@@ -56,6 +60,9 @@ mod test {
         let mut i = Interpreter::new();
 
         let result = i.run(instructions);
-        assert_eq!(result, Err(Error::VariableAlreadyExists("x".to_string())));
+        assert_eq!(
+            result,
+            Err(Error::VariableAlreadyExists("x".to_string(), Position { line: 1, column: 12 }))
+        );
     }
 }

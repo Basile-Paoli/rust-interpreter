@@ -97,9 +97,12 @@ pub enum Keyword {
     ELSE,
     FOR,
     WHILE,
+    BOOL,
     INT,
     FLOAT,
     STRING,
+    TRUE,
+    FALSE,
 }
 
 impl Display for Keyword {
@@ -110,9 +113,12 @@ impl Display for Keyword {
             Keyword::ELSE => write!(f, "else"),
             Keyword::FOR => write!(f, "for"),
             Keyword::WHILE => write!(f, "while"),
+            Keyword::BOOL => write!(f, "bool"),
             Keyword::INT => write!(f, "int"),
             Keyword::FLOAT => write!(f, "float"),
             Keyword::STRING => write!(f, "string"),
+            Keyword::TRUE => write!(f, "true"),
+            Keyword::FALSE => write!(f, "false"),
         }
     }
 }
@@ -124,8 +130,11 @@ lazy_static! {
         ("else", Keyword::ELSE),
         ("for", Keyword::FOR),
         ("while", Keyword::WHILE),
+        ("bool", Keyword::BOOL),
         ("int", Keyword::INT),
         ("float", Keyword::FLOAT),
         ("string", Keyword::STRING),
+        ("true", Keyword::TRUE),
+        ("false", Keyword::FALSE),
     ]);
 }

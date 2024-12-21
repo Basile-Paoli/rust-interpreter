@@ -1,5 +1,5 @@
-use crate::interpreter::VarType;
 use crate::lexer::{Position, Token};
+use crate::var_type::VarType;
 use std::fmt::Display;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -7,12 +7,33 @@ pub enum Error {
     UnexpectedToken(Token),
     InvalidAssignmentTarget(Position),
     UnexpectedEof,
-    DivisionByZero,
-    IoError,
-    VariableNotFound(String),
-    TypeMismatch(VarType, VarType),
-    VariableAlreadyExists(String),
+    DivisionByZero(Position),
+    IoError(Position),
+    VariableNotFound(String, Position),
+    TypeMismatch(VarType, VarType, Position),
+    VariableAlreadyExists(String, Position),
     UnknownVariableType(Position),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum InterpreterError {
+    DivisionByZero,
+    TypeMismatch(VarType, VarType),
+    UnknownVariableType,
+}
+
+pub trait AddPosition<T> {
+    fn map_err_with_pos(self, p: Position) -> Result<T, Error>;
+}
+
+impl<T> AddPosition<T> for Result<T, InterpreterError> {
+    fn map_err_with_pos(self, p: Position) -> Result<T, Error> {
+        self.map_err(|e: InterpreterError| match e {
+            InterpreterError::DivisionByZero => Error::DivisionByZero(p),
+            InterpreterError::TypeMismatch(l, r) => Error::TypeMismatch(l, r, p),
+            InterpreterError::UnknownVariableType => Error::UnknownVariableType(p),
+        })
+    }
 }
 
 impl Display for Error {
@@ -23,13 +44,19 @@ impl Display for Error {
                 write!(f, "Invalid assignment target at {}", position)
             }
             Error::UnexpectedEof => write!(f, "Unexpected end of file"),
-            Error::DivisionByZero => write!(f, "Division by zero"),
-            Error::IoError => write!(f, "I/O error"),
-            Error::VariableNotFound(name) => write!(f, "Variable not found: {}", name),
-            Error::TypeMismatch(left, right) => {
-                write!(f, "Type mismatch: {} and {}", left, right)
+            Error::DivisionByZero(position) => write!(f, "Division by zero at {}", position),
+            Error::IoError(position) => write!(f, "I/O error at {}", position),
+            Error::VariableNotFound(name, position) => {
+                write!(f, "Variable not found: {} at {}", name, position)
             }
-            Error::VariableAlreadyExists(name) => write!(f, "Variable already exists: {}", name),
+            Error::TypeMismatch(expected, found, position) => write!(
+                f,
+                "Type mismatch: {} and {} at {}",
+                expected, found, position
+            ),
+            Error::VariableAlreadyExists(name, position) => {
+                write!(f, "Variable already exists: {} at {}", name, position)
+            }
             Error::UnknownVariableType(position) => {
                 write!(f, "Cannot declare variable without type at {}", position)
             }

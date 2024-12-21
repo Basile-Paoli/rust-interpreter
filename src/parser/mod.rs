@@ -1,5 +1,6 @@
 use crate::error::Error;
 use crate::lexer::{Keyword, Lexer, Token};
+use crate::var_type::VarType;
 use std::collections::HashMap;
 use std::iter::Peekable;
 
@@ -8,8 +9,7 @@ mod expression;
 mod type_analysis;
 mod var_dec;
 
-use crate::interpreter::VarType;
-pub use expression::{ArrayLit, Assignment, BinOp, Expression, Identifier, Int, LValue};
+pub use expression::{ArrayLit, Assignment, BinOp, Expression, Identifier, LValue};
 pub use var_dec::VariableDeclaration;
 
 #[derive(Clone, Debug, PartialEq)]
