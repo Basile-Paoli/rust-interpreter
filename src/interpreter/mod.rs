@@ -1,85 +1,115 @@
 mod array;
 mod expression;
+mod if_statement;
 mod operators;
 mod type_cast;
 mod var_dec;
+mod variable;
 
-use crate::error::Error;
-use crate::interpreter::array::ArrayVariable;
-use crate::parser::{Expression, Instruction};
+use crate::error::{Error, InterpreterError};
+use crate::parser::{Block, BlockOrInstruction, Expression, Instruction};
 use crate::var_type::VarType;
 use std::collections::HashMap;
-use std::fmt::Display;
 use std::io::{Stdout, Write};
+use variable::Variable;
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum Variable {
-    Bool(bool),
-    Int(i32),
-    Float(f64),
-    String(String),
-    Array(ArrayVariable),
-    Empty,
-}
-impl Display for Variable {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Variable::Bool(b) => write!(f, "{}", b),
-            Variable::Int(i) => write!(f, "{}", i),
-            Variable::Float(fl) => write!(f, "{}", fl),
-            Variable::String(s) => write!(f, "{}", s),
-            Variable::Array(a) => write!(f, "{}", a.borrow()),
-            Variable::Empty => write!(f, "(empty)"),
-        }
-    }
+#[derive(Debug, PartialEq, Clone)]
+enum CallStackEntry {
+    Instruction(Instruction),
+    EndBlock,
 }
 
-impl Variable {
-    pub fn var_type(&self) -> VarType {
-        match self {
-            Variable::Bool(_) => VarType::Bool,
-            Variable::Int(_) => VarType::Int,
-            Variable::Float(_) => VarType::Float,
-            Variable::String(_) => VarType::String,
-            Variable::Array(a) => VarType::Array(Box::new(a.borrow().elem_type.clone())),
-            Variable::Empty => VarType::Empty,
-        }
-    }
+#[derive(Debug, PartialEq, Clone, Copy)]
+enum Scope {
+    IfStatement,
+    Loop,
+    Function,
+    Global,
 }
 
 pub struct Interpreter<W: Write = Stdout> {
-    variables: HashMap<String, Variable>,
+    call_stack: Vec<CallStackEntry>,
+    variable_stack: Vec<(HashMap<String, Variable>, Scope)>,
     output: W,
 }
 
-impl Interpreter {
-    pub fn new() -> Interpreter {
+impl<W: Write> Interpreter<W> {
+    pub fn new(output: W) -> Interpreter<W> {
         Interpreter {
-            variables: HashMap::new(),
-            output: std::io::stdout(),
+            call_stack: Vec::new(),
+            variable_stack: Vec::new(),
+            output,
         }
     }
-}
 
-impl<W: Write> Interpreter<W> {
+    pub fn current_variables(&mut self) -> &mut HashMap<String, Variable> {
+        &mut self.variable_stack.last_mut().unwrap().0
+    }
+
+    pub fn get_variable(&mut self, name: &str) -> Result<&mut Variable, InterpreterError> {
+        for variables in self.variable_stack.iter_mut().rev() {
+            if let Some(var) = variables.0.get_mut(name) {
+                return Ok(var);
+            }
+
+            if variables.1 == Scope::Function {
+                break;
+            }
+        }
+        Err(InterpreterError::VariableNotFound(name.to_string()))
+    }
+
     pub fn run(&mut self, instructions: Vec<Instruction>) -> Result<(), Error> {
-        for instruction in instructions {
-            self.instruction(instruction)?;
+        for instruction in instructions.iter().rev() {
+            self.call_stack
+                .push(CallStackEntry::Instruction(instruction.clone()));
+        }
+        self.variable_stack.push((HashMap::new(), Scope::Global));
+        while let Some(entry) = self.call_stack.pop() {
+            match entry {
+                CallStackEntry::Instruction(instruction) => self.instruction(&instruction)?,
+                CallStackEntry::EndBlock => {
+                    self.variable_stack.pop();
+                }
+            }
         }
         Ok(())
     }
 
-    fn instruction(&mut self, instruction: Instruction) -> Result<(), Error> {
+    fn instruction(&mut self, instruction: &Instruction) -> Result<(), Error> {
         match instruction {
             Instruction::Expression(expression) => self.expression_instruction(expression),
             Instruction::VariableDeclaration(declaration) => self.var_dec(declaration),
+            Instruction::IfStatement(if_statement) => self.if_statement(if_statement),
         }
     }
 
-    fn expression_instruction(&mut self, expression: Expression) -> Result<(), Error> {
+    fn block(&mut self, block: &Block, context: Scope) -> Result<(), Error> {
+        self.variable_stack.push((HashMap::new(), context));
+        self.call_stack.push(CallStackEntry::EndBlock);
+        for instruction in block.iter().rev() {
+            self.call_stack
+                .push(CallStackEntry::Instruction(instruction.clone()));
+        }
+        Ok(())
+    }
+
+    fn block_or_instruction(
+        &mut self,
+        body: &BlockOrInstruction,
+        context: Scope,
+    ) -> Result<(), Error> {
+        match body {
+            BlockOrInstruction::Block(block) => self.block(block, context),
+            BlockOrInstruction::Instruction(instruction) => self.instruction(&instruction),
+        }
+    }
+
+    fn expression_instruction(&mut self, expression: &Expression) -> Result<(), Error> {
         let position = expression.position();
-        match expression.clone() {
+        match expression {
             Expression::Assignment(_) => self.expression(expression).map(|_| ()),
+            //TODO: if expression is not an assignment or function call, invalid
             _ => self.expression(expression).and_then(|result| {
                 writeln!(self.output, "{}", result).map_err(|_| Error::IoError(position))
             }),
@@ -98,27 +128,8 @@ mod test {
         let mut p = Parser::new("2 + 3;");
         let instructions = p.parse().unwrap();
         let output = Cursor::new(Vec::new());
-        let mut i = Interpreter {
-            variables: HashMap::new(),
-            output,
-        };
-
+        let mut i = Interpreter::new(output);
         i.run(instructions).unwrap();
         assert_eq!(i.output.into_inner(), b"5\n");
-    }
-
-    #[test]
-    fn test_root_type() {
-        let int = VarType::Int;
-        let array_int = VarType::Array(Box::new(VarType::Int));
-        let array_empty = VarType::Array(Box::new(VarType::Empty));
-        let array_array_int = VarType::Array(Box::new(VarType::Array(Box::new(VarType::Int))));
-        let array_array_empty = VarType::Array(Box::new(VarType::Array(Box::new(VarType::Empty))));
-
-        assert_eq!(int.root_type(), VarType::Int);
-        assert_eq!(array_int.root_type(), VarType::Int);
-        assert_eq!(array_empty.root_type(), VarType::Empty);
-        assert_eq!(array_array_int.root_type(), VarType::Int);
-        assert_eq!(array_array_empty.root_type(), VarType::Empty);
     }
 }

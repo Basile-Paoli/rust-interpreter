@@ -30,7 +30,7 @@ fn main() {
         print!("{}", instruction);
     }
 
-    let mut i = interpreter::Interpreter::new();
+    let mut i = interpreter::Interpreter::new(Vec::new());
     i.run(instructions).unwrap_or_else(|e| {
         eprintln!("{}", e);
         std::process::exit(1);

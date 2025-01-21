@@ -1,4 +1,4 @@
-use crate::error::AddPosition;
+use crate::error::ToErrorResult;
 use crate::lexer::{Keyword, Op, Position, Token};
 use crate::parser::type_analysis::{array_lit_type, operation_type};
 use crate::parser::{Error, Parser};
@@ -124,8 +124,8 @@ impl Parser<'_> {
         let right = self.add()?;
         let var_type = lvalue.var_type();
         if let Some(op) = op.clone() {
-            let op_type =
-                operation_type(op, lvalue.var_type(), right.expr_type()).map_err_with_pos(position)?;
+            let op_type = operation_type(op, lvalue.var_type(), right.expr_type())
+                .to_error_result(position)?;
             if op_type != var_type {
                 return Err(Error::TypeMismatch(var_type, right.expr_type(), position));
             }
@@ -150,8 +150,8 @@ impl Parser<'_> {
             .next_if(|t| matches!(t, Token::Op(Op::ADD | Op::SUB, ..)))
         {
             let right = self.mul()?;
-            let res_type =
-                operation_type(op, left.expr_type(), right.expr_type()).map_err_with_pos(position)?;
+            let res_type = operation_type(op, left.expr_type(), right.expr_type())
+                .to_error_result(position)?;
             left = Expression::BinOp(BinOp {
                 op,
                 left: Box::new(left),
@@ -171,8 +171,8 @@ impl Parser<'_> {
             .next_if(|t| matches!(t, Token::Op(Op::MUL | Op::DIV, ..)))
         {
             let right = self.primary()?;
-            let res_type =
-                operation_type(op, left.expr_type(), right.expr_type()).map_err_with_pos(position)?;
+            let res_type = operation_type(op, left.expr_type(), right.expr_type())
+                .to_error_result(position)?;
             left = Expression::BinOp(BinOp {
                 op,
                 left: Box::new(left),
@@ -205,15 +205,14 @@ impl Parser<'_> {
         name: String,
         position: Position,
     ) -> Result<Expression, Error> {
-        let var_type = self.identifiers.get(&name).cloned();
-        if var_type.is_none() {
-            Err(Error::VariableNotFound(name, position))
-        } else {
-            Ok(Expression::LValue(LValue::Identifier(Identifier {
+        let var_type = self.get_identifier(&name).cloned();
+        match var_type {
+            Some(var_type) => Ok(Expression::LValue(LValue::Identifier(Identifier {
                 name,
                 position,
-                var_type: var_type.unwrap(),
-            })))
+                var_type,
+            }))),
+            None => Err(Error::VariableNotFound(name, position)),
         }
     }
 
@@ -233,10 +232,14 @@ impl Parser<'_> {
             self.lexer.next_if(|t| matches!(t, Token::Comma(..)));
             elements.push(expr);
         }
-        if let None = self.lexer.next_if(|t| matches!(t, Token::RBracket(..))) {
-            return Err(Error::UnexpectedEof);
+
+        match self.lexer.next() {
+            Some(Token::RBracket(_)) => {}
+            Some(token) => return Err(Error::UnexpectedToken(token)),
+            None => return Err(Error::UnexpectedEof),
         }
-        let array_type = array_lit_type(&elements).map_err_with_pos(position)?;
+
+        let array_type = array_lit_type(&elements).to_error_result(position)?;
         Ok(Expression::Array(ArrayLit {
             elements,
             position,
@@ -427,6 +430,40 @@ mod test {
                 Position {
                     line: 1,
                     column: 19
+                }
+            ))
+        );
+    }
+
+    #[test]
+    fn test_double_declare() {
+        let input = "let x: int = 1; let x: int = 2;";
+        let mut parser = Parser::new(input);
+        let res = parser.parse();
+        assert_eq!(
+            res,
+            Err(Error::VariableAlreadyExists(
+                "x".to_string(),
+                Position {
+                    line: 1,
+                    column: 17
+                }
+            ))
+        );
+    }
+
+    #[test]
+    fn test_variable_not_in_scope() {
+        let input = "if(true) { let x = 1; } x = 2;";
+        let mut parser = Parser::new(input);
+        let res = parser.parse();
+        assert_eq!(
+            res,
+            Err(Error::VariableNotFound(
+                "x".to_string(),
+                Position {
+                    line: 1,
+                    column: 25
                 }
             ))
         );

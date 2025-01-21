@@ -20,6 +20,8 @@ pub enum Token {
     LBracket(Position),
     Comma(Position),
     Colon(Position),
+    RBrace(Position),
+    LBrace(Position),
 }
 
 impl Token {
@@ -40,6 +42,8 @@ impl Token {
             Token::LBracket(p) => *p,
             Token::Comma(p) => *p,
             Token::Colon(p) => *p,
+            Token::RBrace(p) => *p,
+            Token::LBrace(p) => *p,
         }
     }
 }
@@ -54,6 +58,8 @@ impl Display for Token {
             Token::RBracket(p) => write!(f, "Right Bracket at {}", p),
             Token::Comma(p) => write!(f, "Comma at {}", p),
             Token::Colon(p) => write!(f, "Colon at {}", p),
+            Token::RBrace(p) => write!(f, "Right Brace at {}", p),
+            Token::LBrace(p) => write!(f, "Left Brace at {}", p),
             Token::Op(op, p) => write!(f, "{} at {}", op, p),
             Token::Assignment(op, p) => match op {
                 Some(op) => write!(f, "Assignment({}) at {}", op, p),

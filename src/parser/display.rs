@@ -1,6 +1,7 @@
 use crate::parser::expression::ArrayLit;
 use crate::parser::{
-    Assignment, BinOp, Expression, Identifier, Instruction, LValue, VariableDeclaration,
+    Assignment, BinOp, BlockOrInstruction, Expression, Identifier, IfStatement, Instruction,
+    LValue, VariableDeclaration,
 };
 use std::fmt::Display;
 
@@ -24,6 +25,7 @@ impl AstDisplay for Instruction {
             Instruction::VariableDeclaration(declaration) => {
                 declaration.ast_fmt(f, indent + INDENT_SIZE)
             }
+            Instruction::IfStatement(if_statement) => if_statement.ast_fmt(f, indent + INDENT_SIZE),
         }
     }
 }
@@ -97,6 +99,25 @@ impl AstDisplay for VariableDeclaration {
             value.ast_fmt(f, indent + INDENT_SIZE)
         } else {
             Ok(())
+        }
+    }
+}
+
+impl AstDisplay for IfStatement {
+    fn ast_fmt(&self, f: &mut std::fmt::Formatter<'_>, indent: usize) -> std::fmt::Result {
+        write!(f, "{:indent$}IfStatement:\n", "")?;
+        self.condition.ast_fmt(f, indent + INDENT_SIZE)?;
+        match *self.body {
+            BlockOrInstruction::Block(ref block) => {
+                write!(f, "{:indent$}Block:\n", "")?;
+                for instruction in block.iter() {
+                    instruction.ast_fmt(f, indent + INDENT_SIZE)?;
+                }
+                Ok(())
+            }
+            BlockOrInstruction::Instruction(ref instruction) => {
+                instruction.ast_fmt(f, indent + INDENT_SIZE)
+            }
         }
     }
 }

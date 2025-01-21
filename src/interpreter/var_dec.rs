@@ -4,14 +4,18 @@ use crate::parser::VariableDeclaration;
 use std::io::Write;
 
 impl<W: Write> Interpreter<W> {
-    pub fn var_dec(&mut self, declaration: VariableDeclaration) -> Result<(), Error> {
-        let val = declaration
-            .value
-            .map_or(Ok(Variable::Empty), |v| self.expression(v))?;
+    pub fn var_dec(&mut self, declaration: &VariableDeclaration) -> Result<(), Error> {
+        let val = match declaration.value {
+            Some(ref expr) => self.expression(expr)?,
+            None => Variable::Empty,
+        };
 
-        match self.variables.insert(declaration.name.clone(), val) {
+        match self
+            .current_variables()
+            .insert(declaration.name.clone(), val)
+        {
             Some(_) => Err(Error::VariableAlreadyExists(
-                declaration.name,
+                declaration.name.clone(),
                 declaration.position,
             )),
             None => Ok(()),
@@ -21,7 +25,6 @@ impl<W: Write> Interpreter<W> {
 
 #[cfg(test)]
 mod test {
-    use crate::lexer::Position;
     use super::*;
 
     #[test]
@@ -31,10 +34,10 @@ mod test {
 
         let mut p = Parser::new("let x = 2;");
         let instructions = p.parse().unwrap();
-        let mut i = Interpreter::new();
+        let mut i = Interpreter::new(Vec::new());
 
         i.run(instructions).unwrap();
-        assert_eq!(i.variables.get("x").unwrap(), &Variable::Int(2));
+        assert_eq!(i.current_variables().get("x").unwrap(), &Variable::Int(2));
     }
 
     #[test]
@@ -44,25 +47,9 @@ mod test {
 
         let mut p = Parser::new("let x: int;");
         let instructions = p.parse().unwrap();
-        let mut i = Interpreter::new();
+        let mut i = Interpreter::new(Vec::new());
 
         i.run(instructions).unwrap();
-        assert_eq!(i.variables.get("x").unwrap(), &Variable::Empty);
-    }
-
-    #[test]
-    fn test_var_dec_error() {
-        use super::Interpreter;
-        use crate::parser::Parser;
-
-        let mut p = Parser::new("let x = 2; let x = 3;");
-        let instructions = p.parse().unwrap();
-        let mut i = Interpreter::new();
-
-        let result = i.run(instructions);
-        assert_eq!(
-            result,
-            Err(Error::VariableAlreadyExists("x".to_string(), Position { line: 1, column: 12 }))
-        );
+        assert_eq!(i.current_variables().get("x").unwrap(), &Variable::Empty);
     }
 }

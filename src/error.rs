@@ -20,18 +20,20 @@ pub enum InterpreterError {
     DivisionByZero,
     TypeMismatch(VarType, VarType),
     UnknownVariableType,
+    VariableNotFound(String),
 }
 
-pub trait AddPosition<T> {
-    fn map_err_with_pos(self, p: Position) -> Result<T, Error>;
+pub trait ToErrorResult<T> {
+    fn to_error_result(self, p: Position) -> Result<T, Error>;
 }
 
-impl<T> AddPosition<T> for Result<T, InterpreterError> {
-    fn map_err_with_pos(self, p: Position) -> Result<T, Error> {
+impl<T> ToErrorResult<T> for Result<T, InterpreterError> {
+    fn to_error_result(self, p: Position) -> Result<T, Error> {
         self.map_err(|e: InterpreterError| match e {
             InterpreterError::DivisionByZero => Error::DivisionByZero(p),
             InterpreterError::TypeMismatch(l, r) => Error::TypeMismatch(l, r, p),
             InterpreterError::UnknownVariableType => Error::UnknownVariableType(p),
+            InterpreterError::VariableNotFound(name) => Error::VariableNotFound(name, p),
         })
     }
 }

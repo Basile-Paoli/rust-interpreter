@@ -1,4 +1,4 @@
-use crate::error::{AddPosition, Error, InterpreterError};
+use crate::error::{Error, InterpreterError, ToErrorResult};
 use crate::lexer::{Keyword, Position, Token};
 use crate::parser::{Expression, Instruction, Parser};
 use crate::var_type::VarType;
@@ -16,6 +16,10 @@ impl Parser<'_> {
         let t = self.lexer.next().unwrap();
         let id = self.identifier()?;
 
+        if self.identifier_exists_in_current_scope(&id) {
+            return Err(Error::VariableAlreadyExists(id, t.position()));
+        }
+
         let var_type = if let Some(Token::Colon(_)) = self.lexer.peek() {
             self.lexer.next();
             self.type_dec()?
@@ -29,7 +33,7 @@ impl Parser<'_> {
                 return if var_type.root_type() == VarType::Empty {
                     Err(Error::UnknownVariableType(t.position()))
                 } else {
-                    self.identifiers.insert(id.clone(), var_type.clone());
+                    self.insert_identifier(id.clone(), var_type.clone());
                     Ok(Instruction::VariableDeclaration(VariableDeclaration {
                         name: id,
                         value: None,
@@ -46,9 +50,9 @@ impl Parser<'_> {
         let value = self.expression()?;
         let expr_type = value.expr_type();
         let p = t.position();
-        let res_type = infer_type(var_type, expr_type).map_err_with_pos(p)?;
+        let res_type = infer_type(var_type, expr_type).to_error_result(p)?;
 
-        self.identifiers.insert(id.clone(), value.expr_type());
+        self.insert_identifier(id.clone(), value.expr_type());
 
         match self.lexer.next() {
             Some(Token::Semicolon(_)) => {
@@ -142,6 +146,48 @@ mod test {
             var_type: VarType::Int,
         });
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_variable_dec_twice() {
+        let mut p = Parser::new("let x= 2; let x= 3;");
+        p.parse_variable_declaration()
+            .expect("Failed to parse first variable declaration");
+        let result = p.parse_variable_declaration();
+        assert_eq!(
+            result,
+            Err(Error::VariableAlreadyExists(
+                "x".to_string(),
+                Position {
+                    line: 1,
+                    column: 11
+                }
+            ))
+        );
+    }
+
+    #[test]
+    fn test_variable_dec_scope() {
+        let mut p = Parser::new("let x= 2; { let x= 3; }");
+        p.parse_variable_declaration()
+            .expect("Failed to parse first variable declaration");
+        assert!(p.block().is_ok());
+    }
+
+    #[test]
+    fn test_var_dec_scope_error() {
+        let mut p = Parser::new("if (true) { let x = 2; } x = 3;");
+        let result = p.parse();
+        assert_eq!(
+            result,
+            Err(Error::VariableNotFound(
+                "x".to_string(),
+                Position {
+                    line: 1,
+                    column: 26
+                }
+            ))
+        );
     }
 
     #[test]

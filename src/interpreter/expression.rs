@@ -1,4 +1,4 @@
-use crate::error::{AddPosition, Error, InterpreterError};
+use crate::error::{Error, InterpreterError, ToErrorResult};
 use crate::interpreter::array::Array;
 use crate::interpreter::operators::{addition, division, multiplication, subtraction};
 use crate::interpreter::type_cast::{cast_to_bool, cast_to_float, cast_to_int, cast_to_string};
@@ -6,27 +6,26 @@ use crate::interpreter::{Interpreter, Variable};
 use crate::lexer::Op;
 use crate::parser::{ArrayLit, Assignment, BinOp, Expression, LValue};
 use std::cell::RefCell;
-use std::collections::hash_map::Entry;
 use std::io::Write;
 use std::rc::Rc;
 
 impl<W: Write> Interpreter<W> {
-    pub fn expression(&mut self, expression: Expression) -> Result<Variable, Error> {
+    pub fn expression(&mut self, expression: &Expression) -> Result<Variable, Error> {
         match expression {
             Expression::BinOp(binop) => self.binop(binop),
-            Expression::Bool(val, _) => Ok(Variable::Bool(val)),
-            Expression::Int(val, _) => Ok(Variable::Int(val)),
-            Expression::Float(val, _) => Ok(Variable::Float(val)),
-            Expression::StringLit(val, _) => Ok(Variable::String(val)),
+            Expression::Bool(val, _) => Ok(Variable::Bool(*val)),
+            Expression::Int(val, _) => Ok(Variable::Int(*val)),
+            Expression::Float(val, _) => Ok(Variable::Float(*val)),
+            Expression::StringLit(val, _) => Ok(Variable::String(val.clone())),
             Expression::Assignment(assignment) => self.assignment(assignment),
             Expression::LValue(lvalue) => Ok(self.lvalue(lvalue)?.clone()),
             Expression::Array(a) => Ok(self.array(a)?.clone()),
         }
     }
 
-    fn binop(&mut self, binop: BinOp) -> Result<Variable, Error> {
-        let left = self.expression(*binop.left)?;
-        let right = self.expression(*binop.right)?;
+    fn binop(&mut self, binop: &BinOp) -> Result<Variable, Error> {
+        let left = self.expression(&*binop.left)?;
+        let right = self.expression(&*binop.right)?;
         match binop.op {
             Op::ADD => addition(&left, &right),
             Op::SUB => subtraction(&left, &right),
@@ -34,12 +33,12 @@ impl<W: Write> Interpreter<W> {
             Op::DIV => division(&left, &right),
             Op::EQ => Ok(Variable::Int((left == right) as i32)),
         }
-        .map_err_with_pos(binop.position)
+        .to_error_result(binop.position)
     }
 
-    fn assignment(&mut self, assignment: Assignment) -> Result<Variable, Error> {
-        let right = self.expression(*assignment.right)?;
-        let left = self.lvalue(*assignment.left)?;
+    fn assignment(&mut self, assignment: &Assignment) -> Result<Variable, Error> {
+        let right = self.expression(&assignment.right)?;
+        let left = self.lvalue(&assignment.left)?;
 
         let result = match assignment.op {
             Some(Op::ADD) => addition(&left, &right),
@@ -49,28 +48,26 @@ impl<W: Write> Interpreter<W> {
             None => Ok(right),
             _ => unreachable!(),
         }
-        .map_err_with_pos(assignment.position)?;
-        assign(left, result).map_err_with_pos(assignment.position)?;
+        .to_error_result(assignment.position)?;
+        assign(left, result).to_error_result(assignment.position)?;
         Ok(left.clone())
     }
 
-    fn lvalue(&mut self, lvalue: LValue) -> Result<&mut Variable, Error> {
+    fn lvalue(&mut self, lvalue: &LValue) -> Result<&mut Variable, Error> {
         match lvalue {
             LValue::Identifier(identifier) => {
-                let name = identifier.name;
-                match self.variables.entry(name.clone()) {
-                    Entry::Occupied(o) => Ok(o.into_mut()),
-                    Entry::Vacant(_) => Err(Error::VariableNotFound(name, identifier.position)),
-                }
+                let name = identifier.name.clone();
+                self.get_variable(&name)
+                    .to_error_result(identifier.position)
             }
         }
     }
 
-    fn array(&mut self, a: ArrayLit) -> Result<Variable, Error> {
+    fn array(&mut self, a: &ArrayLit) -> Result<Variable, Error> {
         let values = a
             .elements
             .iter()
-            .map(|v| self.expression(v.clone()))
+            .map(|v| self.expression(v))
             .collect::<Result<Vec<_>, _>>()?;
         let res = Array::new(values);
         Ok(Variable::Array(Rc::new(RefCell::new(res))))
@@ -113,18 +110,18 @@ mod test {
     #[test]
     fn test_expression() {
         let mut p = Parser::new("1 + 2 * 3");
-        let mut i = Interpreter::new();
+        let mut i = Interpreter::new(Vec::new());
         let expr = p.expression().unwrap();
-        let result = i.expression(expr).unwrap();
+        let result = i.expression(&expr).unwrap();
         assert_eq!(result, Variable::Int(7));
     }
 
     #[test]
     fn test_division_by_zero() {
         let mut p = Parser::new("1 / 0");
-        let mut i = Interpreter::new();
+        let mut i = Interpreter::new(Vec::new());
         let expr = p.expression().unwrap();
-        let result = i.expression(expr);
+        let result = i.expression(&expr);
         assert_eq!(
             result,
             Err(Error::DivisionByZero(Position { line: 1, column: 3 }))
@@ -134,19 +131,19 @@ mod test {
     #[test]
     fn test_assignment() {
         let mut p = Parser::new("let x = 2; x = x + 3;");
-        let mut i = Interpreter::new();
+        let mut i = Interpreter::new(Vec::new());
         let instructions = p.parse().unwrap();
         i.run(instructions).unwrap();
-        assert_eq!(i.variables.get("x").unwrap(), &Variable::Int(5));
+        assert_eq!(i.current_variables().get("x").unwrap(), &Variable::Int(5));
     }
 
     #[test]
     fn test_assignment_to_empty() {
         let mut p = Parser::new("let x: int; x = 3;");
-        let mut i = Interpreter::new();
+        let mut i = Interpreter::new(Vec::new());
         let instructions = p.parse().unwrap();
         i.run(instructions).unwrap();
-        assert_eq!(i.variables.get("x").unwrap(), &Variable::Int(3));
+        assert_eq!(i.current_variables().get("x").unwrap(), &Variable::Int(3));
     }
 
     #[test]
@@ -169,18 +166,21 @@ mod test {
     #[test]
     fn test_type_cast() {
         let mut p = Parser::new("let x = 2.0; x += 3;");
-        let mut i = Interpreter::new();
+        let mut i = Interpreter::new(Vec::new());
         let instructions = p.parse().unwrap();
         i.run(instructions).unwrap();
-        assert_eq!(i.variables.get("x").unwrap(), &Variable::Float(5.0));
+        assert_eq!(
+            i.current_variables().get("x").unwrap(),
+            &Variable::Float(5.0)
+        );
     }
 
     #[test]
     fn test_array() {
         let mut p = Parser::new("[1, 2, 3]");
-        let mut i = Interpreter::new();
+        let mut i = Interpreter::new(Vec::new());
         let expr = p.expression().unwrap();
-        let result = i.expression(expr).unwrap();
+        let result = i.expression(&expr).unwrap();
         if let Variable::Array(array) = result {
             assert_eq!(array.borrow().elements.len(), 3);
             assert_eq!(array.borrow().elements[0], Variable::Int(1));
@@ -194,9 +194,9 @@ mod test {
     #[test]
     fn test_nested_array() {
         let mut p = Parser::new("[[1, 2], [3, 4]]");
-        let mut i = Interpreter::new();
+        let mut i = Interpreter::new(Vec::new());
         let expr = p.expression().unwrap();
-        let result = i.expression(expr).unwrap();
+        let result = i.expression(&expr).unwrap();
         if let Variable::Array(array) = result {
             assert_eq!(array.borrow().elements.len(), 2);
             if let Variable::Array(inner) = &array.borrow().elements[0] {
