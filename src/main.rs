@@ -1,6 +1,6 @@
 use std::env;
 use std::fs::File;
-use std::io::Read;
+use std::io::{stdout, Read};
 
 mod error;
 mod interpreter;
@@ -11,17 +11,18 @@ mod var_type;
 fn main() {
     let args = env::args().collect::<Vec<_>>();
     let input_file = args.get(1).map(|s| s.as_str()).unwrap_or("input.txt");
+    
     let input = read_input(input_file).unwrap_or_else(|e| {
         eprintln!("Error reading input file: {}", e);
         std::process::exit(1);
     });
-
+    
     let mut p = parser::Parser::new(&input);
     let tokens = p.lexer.clone().collect::<Vec<_>>();
     for token in tokens {
         println!("{}", token);
     }
-
+    
     let instructions = p.parse().unwrap_or_else(|e| {
         eprintln!("{}", e);
         std::process::exit(1);
@@ -29,8 +30,8 @@ fn main() {
     for instruction in &instructions {
         print!("{}", instruction);
     }
-
-    let mut i = interpreter::Interpreter::new(Vec::new());
+    
+    let mut i = interpreter::Interpreter::new(stdout());
     i.run(instructions).unwrap_or_else(|e| {
         eprintln!("{}", e);
         std::process::exit(1);

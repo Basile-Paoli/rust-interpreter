@@ -1,5 +1,6 @@
 use crate::error::Error;
-use crate::lexer::{Keyword, Token};
+use crate::expect_token;
+use crate::lexer::{Keyword, Position, Token};
 use crate::parser::{Expression, Parser, VariableDeclaration};
 use std::collections::HashMap;
 
@@ -22,6 +23,8 @@ pub enum BlockOrInstruction {
 pub struct IfStatement {
     pub condition: Expression,
     pub body: Box<BlockOrInstruction>,
+    pub else_body: Option<Box<BlockOrInstruction>>,
+    pub position: Position,
 }
 
 impl<'a> Parser<'a> {
@@ -36,32 +39,33 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_if_statement(&mut self) -> Result<Instruction, Error> {
-        match self.lexer.next() {
-            Some(Token::Keyword(Keyword::IF, _)) => {
-                match self.lexer.peek() {
-                    Some(Token::LParen(_)) => {
-                        self.lexer.next();
-                    }
-                    Some(token) => return Err(Error::UnexpectedToken(token.clone())),
-                    None => return Err(Error::UnexpectedEof),
-                }
-                let condition = self.paren_expr()?;
-                let body = Box::new(self.block_or_instruction()?);
-                Ok(Instruction::IfStatement(IfStatement { condition, body }))
-            }
-            Some(token) => Err(Error::UnexpectedToken(token)),
-            None => Err(Error::UnexpectedEof),
-        }
+        let position = expect_token!(self.lexer,
+            Token::Keyword(Keyword::IF, position) => position
+        )?;
+
+        expect_token!(self.lexer, Token::LParen(_))?;
+
+        let condition = self.paren_expr()?;
+        let body = Box::new(self.block_or_instruction()?);
+        let else_body = if let Some(Token::Keyword(Keyword::ELSE, _)) = self.lexer.peek() {
+            self.lexer.next();
+            Some(Box::new(self.block_or_instruction()?))
+        } else {
+            None
+        };
+        Ok(Instruction::IfStatement(IfStatement {
+            condition,
+            body,
+            else_body,
+            position,
+        }))
     }
 
     fn parse_expression_instruction(&mut self) -> Result<Instruction, Error> {
         let expression = self.expression()?;
         //TODO: if expression is not an assignment or function call, invalid
-        match self.lexer.next() {
-            Some(Token::Semicolon(_)) => Ok(Instruction::Expression(expression)),
-            Some(token) => Err(Error::UnexpectedToken(token)),
-            None => Err(Error::UnexpectedEof),
-        }
+        expect_token!(self.lexer, Token::Semicolon(_))?;
+        Ok(Instruction::Expression(expression))
     }
 
     fn block_or_instruction(&mut self) -> Result<BlockOrInstruction, Error> {
@@ -76,11 +80,7 @@ impl<'a> Parser<'a> {
     }
 
     pub fn block(&mut self) -> Result<Block, Error> {
-        match self.lexer.next() {
-            Some(Token::LBrace(_)) => {}
-            Some(token) => return Err(Error::UnexpectedToken(token)),
-            None => return Err(Error::UnexpectedEof),
-        }
+        expect_token!(self.lexer, Token::LBrace(_))?;
 
         self.identifiers_stack.push(HashMap::new());
         let mut block = Vec::new();

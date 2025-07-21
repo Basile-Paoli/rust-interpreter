@@ -14,6 +14,21 @@ pub use crate::parser::instruction::{Block, BlockOrInstruction, IfStatement, Ins
 pub use expression::{ArrayLit, Assignment, BinOp, Expression, Identifier, LValue};
 pub use var_dec::VariableDeclaration;
 
+#[macro_export]
+macro_rules! expect_token {
+    ($lexer:expr, $($token:pat => $ret_val:expr),*) => {
+        match $lexer.next() {
+            $(Some($token) => Ok($ret_val),)*
+            Some(token) => Err(Error::UnexpectedToken(token)),
+            None => Err(Error::UnexpectedEof),
+        }
+    };
+
+    ($lexer:expr, $token:pat) => {
+        expect_token!($lexer, $token => ())
+    };
+}
+
 pub struct Parser<'a> {
     pub lexer: Peekable<Lexer<'a>>,
     pub identifiers_stack: Vec<HashMap<String, VarType>>,

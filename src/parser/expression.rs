@@ -1,4 +1,5 @@
 use crate::error::ToErrorResult;
+use crate::expect_token;
 use crate::lexer::{Keyword, Op, Position, Token};
 use crate::parser::type_analysis::{array_lit_type, operation_type};
 use crate::parser::{Error, Parser};
@@ -218,26 +219,22 @@ impl Parser<'_> {
 
     pub fn paren_expr(&mut self) -> Result<Expression, Error> {
         let expr = self.expression()?;
-        match self.lexer.next() {
-            Some(Token::RParen(_)) => Ok(expr),
-            Some(token) => Err(Error::UnexpectedToken(token)),
-            None => Err(Error::UnexpectedEof),
-        }
+        expect_token!(self.lexer, Token::RParen(_))?;
+        Ok(expr)
     }
 
     pub fn array(&mut self, position: Position) -> Result<Expression, Error> {
         let mut elements = Vec::new();
         while !matches!(self.lexer.peek(), Some(Token::RBracket(..))) {
             let expr = self.expression()?;
-            self.lexer.next_if(|t| matches!(t, Token::Comma(..)));
             elements.push(expr);
+            let next = self.lexer.next_if(|t| matches!(t, Token::Comma(..)));
+            if next.is_none() {
+                break;
+            }
         }
 
-        match self.lexer.next() {
-            Some(Token::RBracket(_)) => {}
-            Some(token) => return Err(Error::UnexpectedToken(token)),
-            None => return Err(Error::UnexpectedEof),
-        }
+        expect_token!(self.lexer, Token::RBracket(_))?;
 
         let array_type = array_lit_type(&elements).to_error_result(position)?;
         Ok(Expression::Array(ArrayLit {

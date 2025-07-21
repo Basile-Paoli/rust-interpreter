@@ -10,7 +10,7 @@ use crate::error::{Error, InterpreterError};
 use crate::parser::{Block, BlockOrInstruction, Expression, Instruction};
 use crate::var_type::VarType;
 use std::collections::HashMap;
-use std::io::{Stdout, Write};
+use std::io::Write;
 use variable::Variable;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -22,12 +22,11 @@ enum CallStackEntry {
 #[derive(Debug, PartialEq, Clone, Copy)]
 enum Scope {
     IfStatement,
-    Loop,
     Function,
     Global,
 }
 
-pub struct Interpreter<W: Write = Stdout> {
+pub struct Interpreter<W: Write> {
     call_stack: Vec<CallStackEntry>,
     variable_stack: Vec<(HashMap<String, Variable>, Scope)>,
     output: W,

@@ -1,4 +1,5 @@
 use crate::error::{Error, InterpreterError, ToErrorResult};
+use crate::expect_token;
 use crate::lexer::{Keyword, Position, Token};
 use crate::parser::{Expression, Instruction, Parser};
 use crate::var_type::VarType;
@@ -27,24 +28,23 @@ impl Parser<'_> {
             VarType::Empty
         };
 
-        let next = self.lexer.next();
-        match next {
-            Some(Token::Semicolon(_)) => {
-                return if var_type.root_type() == VarType::Empty {
-                    Err(Error::UnknownVariableType(t.position()))
-                } else {
-                    self.insert_identifier(id.clone(), var_type.clone());
-                    Ok(Instruction::VariableDeclaration(VariableDeclaration {
-                        name: id,
-                        value: None,
-                        position: t.position(),
-                        var_type,
-                    }))
-                }
-            }
-            Some(Token::Assignment(None, ..)) => {}
-            Some(token) => return Err(Error::UnexpectedToken(token)),
-            None => return Err(Error::UnexpectedEof),
+        let semi_colon = expect_token!(self.lexer,
+            Token::Semicolon(_) => true,
+            Token::Assignment(None, _) => false
+        )?;
+
+        if semi_colon {
+            return if var_type.root_type() == VarType::Empty {
+                Err(Error::UnknownVariableType(t.position()))
+            } else {
+                self.insert_identifier(id.clone(), var_type.clone());
+                Ok(Instruction::VariableDeclaration(VariableDeclaration {
+                    name: id,
+                    value: None,
+                    position: t.position(),
+                    var_type,
+                }))
+            };
         }
 
         let value = self.expression()?;
@@ -54,18 +54,13 @@ impl Parser<'_> {
 
         self.insert_identifier(id.clone(), value.expr_type());
 
-        match self.lexer.next() {
-            Some(Token::Semicolon(_)) => {
-                Ok(Instruction::VariableDeclaration(VariableDeclaration {
-                    name: id,
-                    value: Some(value),
-                    position: t.position(),
-                    var_type: res_type,
-                }))
-            }
-            Some(token) => Err(Error::UnexpectedToken(token)),
-            None => Err(Error::UnexpectedEof),
-        }
+        expect_token!(self.lexer, Token::Semicolon(_))?;
+        Ok(Instruction::VariableDeclaration(VariableDeclaration {
+            name: id,
+            value: Some(value),
+            position: t.position(),
+            var_type: res_type,
+        }))
     }
 
     fn identifier(&mut self) -> Result<String, Error> {
@@ -80,29 +75,21 @@ impl Parser<'_> {
         let mut root_type = self.type_identifier()?;
         while let Some(Token::LBracket(_)) = self.lexer.peek() {
             self.lexer.next();
-            let next = self.lexer.next();
-            match next {
-                Some(Token::RBracket(_)) => {
-                    root_type = VarType::Array(Box::new(root_type));
-                }
-                Some(token) => return Err(Error::UnexpectedToken(token)),
-                None => return Err(Error::UnexpectedEof),
-            }
+            expect_token!(self.lexer, Token::RBracket(_))?;
+            root_type = VarType::Array(Box::new(root_type));
         }
         Ok(root_type)
     }
 
     fn type_identifier(&mut self) -> Result<VarType, Error> {
-        let next = self.lexer.next();
-        match &next {
-            Some(Token::Keyword(keyword, _)) => match keyword {
-                Keyword::INT => Ok(VarType::Int),
-                Keyword::FLOAT => Ok(VarType::Float),
-                Keyword::STRING => Ok(VarType::String),
-                _ => Err(Error::UnexpectedToken(next.unwrap())),
-            },
-            None => Err(Error::UnexpectedEof),
-            Some(token) => Err(Error::UnexpectedToken(token.clone())),
+        let (keyword, position) =
+            expect_token!(self.lexer, Token::Keyword(keyword, position) => (keyword, position))?;
+        match keyword {
+            Keyword::INT => Ok(VarType::Int),
+            Keyword::FLOAT => Ok(VarType::Float),
+            Keyword::STRING => Ok(VarType::String),
+            Keyword::BOOL => Ok(VarType::Bool),
+            _ => Err(Error::UnexpectedToken(Token::Keyword(keyword, position))),
         }
     }
 }
